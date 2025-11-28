@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'package:geolocator/geolocator.dart';
 
 import 'package:relatoriooffline/widgets/customDropdown.dart';
 import 'package:relatoriooffline/widgets/custonItemQuantidade.dart';
@@ -79,8 +80,49 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
     'coordenadoriaMunicipalId': TextEditingController(),
   };
 
+  DateTime? _dataNascimentoSelecionada;
+  double? _latitude;
+  double? _longitude;
 
-  void _salvarFormulario() {
+  String _formatarData(DateTime data) {
+    final dia = data.day.toString().padLeft(2, '0');
+    final mes = data.month.toString().padLeft(2, '0');
+    return '$dia/$mes/${data.year}';
+  }
+
+  Future<void> _selecionarDataNascimento() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dataNascimentoSelecionada ?? DateTime(1990, 1, 1),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      helpText: 'Selecione a data de nascimento',
+      cancelText: 'Cancelar',
+      confirmText: 'Confirmar',
+    );
+
+    if (picked != null) {
+      setState(() {
+        _dataNascimentoSelecionada = picked;
+        _controllers['dataNascimentoAtingido']!.text = _formatarData(picked);
+      });
+    }
+  }
+
+  Future<void> _salvarFormulario() async {
+    if (!(_formKey.currentState?.validate() ?? true)) {
+      return;
+    }
+
+    if (_latitude == null || _longitude == null) {
+      final sucessoLocalizacao = await _capturarLocalizacao(showFeedback: false);
+      if (!sucessoLocalizacao && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível obter a localização atual.')),
+        );
+      }
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Salvando formulário...')),
     );
@@ -111,7 +153,7 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       'nomeAtingido': _controllers['nomeAtingido']!.text,
       'cpfAtingido': _controllers['cpfAtingido']!.text,
       'rgAtingido': _controllers['rgAtingido']!.text,
-      'dataNascimentoAtingido': _controllers['dataNascimentoAtingido']!.text,
+      'dataNascimentoAtingido': _dataNascimentoSelecionada?.toIso8601String(),
       'enderecoAtingido': _controllers['enderecoAtingido']!.text,
       'bairroAtingido': _controllers['bairroAtingido']!.text,
       'cidadeAtingido': _controllers['cidadeAtingido']!.text,
@@ -152,6 +194,8 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       'outrasNecessidades': _controllers['outrasNecessidades']!.text,
       'observacaoAssistencia': _controllers['observacaoAssistencia']!.text,
       'coordenadoriaMunicipalId': _controllers['coordenadoriaMunicipalId']!.text,
+      'latitude': _latitude?.toString(),
+      'longitude': _longitude?.toString(),
     };
 
     final dadosJson = jsonEncode(payload);
@@ -198,7 +242,7 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
     );
   }
 
-  Widget _campo(String key, {String? label}) {
+  Widget _campo(String key, {String? label, bool obrigatorio = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
@@ -209,9 +253,81 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
             borderRadius: BorderRadius.circular(10),
           ),
         ),
-        validator: null,
+        validator: obrigatorio
+            ? (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Campo obrigatório';
+                }
+                return null;
+              }
+            : null,
       ),
     );
+  }
+
+  Widget _campoDataNascimento() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: TextFormField(
+        controller: _controllers['dataNascimentoAtingido'],
+        readOnly: true,
+        decoration: InputDecoration(
+          labelText: 'Data de Nascimento',
+          suffixIcon: const Icon(Icons.calendar_today),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        onTap: _selecionarDataNascimento,
+      ),
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _capturarLocalizacao();
+  }
+
+  Future<bool> _capturarLocalizacao({bool showFeedback = true}) async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (mounted && showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ative o serviço de localização para capturar latitude/longitude.')),
+        );
+      }
+      return false;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        if (mounted && showFeedback) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Permissão de localização negada.')),
+          );
+        }
+        return false;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      if (mounted && showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Permissão de localização permanentemente negada. Configure nas definições.')),
+        );
+      }
+      return false;
+    }
+
+    final posicao = await Geolocator.getCurrentPosition();
+    setState(() {
+      _latitude = posicao.latitude;
+      _longitude = posicao.longitude;
+    });
+    return true;
   }
 
   @override
@@ -224,7 +340,9 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.save),
-            onPressed: _salvarFormulario,
+            onPressed: () {
+              _salvarFormulario();
+            },
           )
         ],
       ),
@@ -236,10 +354,10 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
           children: [
 
             _tituloSecao("Identificação do Atingido"),
-            _campo('nomeAtingido', label: "Nome"),
+            _campo('nomeAtingido', label: "Nome", obrigatorio: true),
             _campo('cpfAtingido', label: "CPF"),
             _campo('rgAtingido', label: "RG"),
-            _campo('dataNascimentoAtingido', label: "Data de Nascimento"),
+            _campoDataNascimento(),
             _campo('enderecoAtingido', label: "Endereço"),
             _campo('bairroAtingido', label: "Bairro"),
             _campo('cidadeAtingido', label: "Cidade"),
@@ -385,7 +503,9 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
 
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: Colors.orange.shade700,
-        onPressed: _salvarFormulario,
+        onPressed: () {
+          _salvarFormulario();
+        },
         icon: const Icon(Icons.save),
         label: const Text("Salvar"),
       ),

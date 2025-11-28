@@ -4,12 +4,14 @@ class CustomDropdown extends StatelessWidget {
   final String label;
   final TextEditingController controller;
   final List<String> opcoes;
+  final bool obrigatorio;
 
   const CustomDropdown({
     super.key,
     required this.label,
     required this.controller,
     required this.opcoes,
+    this.obrigatorio = false,
   });
 
   @override
@@ -31,8 +33,9 @@ class CustomDropdown extends StatelessWidget {
         onChanged: (value) {
           controller.text = value ?? '';
         },
-        validator: (value) =>
-        value == null || value.isEmpty ? "Selecione uma opção" : null,
+        validator: obrigatorio
+            ? (value) => value == null || value.isEmpty ? "Selecione uma opção" : null
+            : null,
       ),
     );
   }
