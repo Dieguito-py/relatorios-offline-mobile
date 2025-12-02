@@ -108,13 +108,21 @@ class _LoginPageState extends State<LoginPage> {
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.orange.shade700,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.shield,
-                      size: 80,
                       color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.orange.shade100,
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Image.asset(
+                      'lib/assets/logodc.png',
+                      width: 96,
+                      height: 96,
+                      fit: BoxFit.contain,
                     ),
                   ),
                   const SizedBox(height: 32),
@@ -265,4 +273,3 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
-

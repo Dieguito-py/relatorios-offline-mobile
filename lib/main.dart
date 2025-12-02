@@ -100,10 +100,11 @@ class _SplashScreenState extends State<SplashScreen> {
                   ),
                 ],
               ),
-              child: Icon(
-                Icons.shield,
-                size: 80,
-                color: Colors.orange.shade700,
+              child: Image.asset(
+                'lib/assets/logodc.png',
+                width: 96,
+                height: 96,
+                fit: BoxFit.contain,
               ),
             ),
             const SizedBox(height: 32),
@@ -133,4 +134,3 @@ class _SplashScreenState extends State<SplashScreen> {
     );
   }
 }
-
