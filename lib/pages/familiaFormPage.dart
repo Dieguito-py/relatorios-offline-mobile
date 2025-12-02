@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'package:relatoriooffline/widgets/customDropdown.dart';
 import 'package:relatoriooffline/widgets/custonItemQuantidade.dart';
@@ -83,6 +86,8 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
   DateTime? _dataNascimentoSelecionada;
   double? _latitude;
   double? _longitude;
+  Uint8List? _fotoResidencia;
+  final ImagePicker _picker = ImagePicker();
 
   String _formatarData(DateTime data) {
     final dia = data.day.toString().padLeft(2, '0');
@@ -196,6 +201,7 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       'coordenadoriaMunicipalId': _controllers['coordenadoriaMunicipalId']!.text,
       'latitude': _latitude?.toString(),
       'longitude': _longitude?.toString(),
+      'fotoResidencia': _fotoResidencia != null ? base64Encode(_fotoResidencia!) : null,
     };
 
     final dadosJson = jsonEncode(payload);
@@ -280,6 +286,55 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
         ),
         onTap: _selecionarDataNascimento,
       ),
+    );
+  }
+
+  Future<void> _selecionarFotoResidencia() async {
+    final XFile? imagem = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70, maxWidth: 1600);
+    if (imagem == null) return;
+    final bytes = await imagem.readAsBytes();
+    setState(() {
+      _fotoResidencia = bytes;
+    });
+  }
+
+  Widget _previewFotoResidencia() {
+    if (_fotoResidencia == null) {
+      return OutlinedButton.icon(
+        onPressed: _selecionarFotoResidencia,
+        icon: const Icon(Icons.photo_camera_back),
+        label: const Text('Selecionar foto da residência'),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.memory(
+            _fotoResidencia!,
+            width: double.infinity,
+            height: 180,
+            fit: BoxFit.cover,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            TextButton.icon(
+              onPressed: _selecionarFotoResidencia,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Trocar foto'),
+            ),
+            const SizedBox(width: 12),
+            TextButton.icon(
+              onPressed: () => setState(() => _fotoResidencia = null),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Remover'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -496,6 +551,13 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
 
             _campo('outrasNecessidades', label: "Outros Itens"),
             _campo('observacaoAssistencia', label: "Observações"),
+            const SizedBox(height: 16),
+            Text(
+              'Foto da residência',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            _previewFotoResidencia(),
 
           ],
         ),
