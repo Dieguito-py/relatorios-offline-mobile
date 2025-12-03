@@ -3,20 +3,14 @@ import 'package:http/http.dart' as http;
 import 'dart:io';
 
 class ApiService {
+  static const String _baseUrl = 'https://relatoriosoffline.app/api';
   static String customBaseUrl = '';
 
   static String getBaseUrl() {
     if (customBaseUrl.isNotEmpty) {
       return customBaseUrl;
     }
-
-    if (Platform.isAndroid) {
-      return 'http://10.0.2.2:8084/api';
-    } else if (Platform.isIOS) {
-      return 'http://localhost:8084/api';
-    } else {
-      return 'http://localhost:8084/api';
-    }
+    return _baseUrl;
   }
 
   Future<Map<String, dynamic>?> login(String username, String password) async {
@@ -76,4 +70,3 @@ class ApiService {
     }
   }
 }
-

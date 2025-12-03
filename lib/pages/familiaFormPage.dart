@@ -549,6 +549,18 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
               controllerQuantidade: _controllers["qtdRoupasQtd"]!,
             ),
 
+            CustomItemQuantidade(
+              label: "Telhas 6mm",
+              controllerMarcado: _controllers["qtdTelhas6mm"]!,
+              controllerQuantidade: _controllers["qtdTelhas6mmQtd"]!,
+            ),
+
+            CustomItemQuantidade(
+              label: "Telhas 4mm",
+              controllerMarcado: _controllers["qtdTelhas4mm"]!,
+              controllerQuantidade: _controllers["qtdTelhas4mmQtd"]!,
+            ),
+
             _campo('outrasNecessidades', label: "Outros Itens"),
             _campo('observacaoAssistencia', label: "Observações"),
             const SizedBox(height: 16),

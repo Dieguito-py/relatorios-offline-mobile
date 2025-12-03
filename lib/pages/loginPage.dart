@@ -86,15 +86,6 @@ class _LoginPageState extends State<LoginPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.settings, color: Colors.orange.shade700),
-            onPressed: () {
-              Navigator.pushNamed(context, '/configuracoes');
-            },
-            tooltip: 'Configurar servidor',
-          ),
-        ],
       ),
       body: SafeArea(
         child: Center(
