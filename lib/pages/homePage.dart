@@ -67,8 +67,11 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _handleRefresh() async {
-    if (_isRefreshing) return;
-    _isRefreshing = true;
+    if (_isRefreshing) {
+      _showSnack('Sincronização em andamento, aguarde.');
+      return;
+    }
+    setState(() => _isRefreshing = true);
     try {
       final pendentesAntes = _pendentesCount;
       await SyncService.instance.syncPending();
@@ -89,7 +92,11 @@ class _HomePageState extends State<HomePage> {
         _showSnack('Não foi possível sincronizar agora. Tente novamente.', sucesso: false);
       }
     } finally {
-      _isRefreshing = false;
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+      } else {
+        _isRefreshing = false;
+      }
     }
   }
 

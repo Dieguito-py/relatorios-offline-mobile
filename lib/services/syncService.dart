@@ -15,6 +15,7 @@ class SyncService {
   StreamSubscription<dynamic>? _connectivitySubscription;
   bool _monitoringStarted = false;
   bool _isSyncing = false;
+  final Set<int> _inFlightIds = <int>{};
 
   bool _hasConnection(dynamic status) {
     if (status is ConnectivityResult) {
@@ -54,7 +55,17 @@ class SyncService {
     return await AppDatabase.instance.obterToken();
   }
 
-  Future<bool> trySendRelatorio(Map<String, dynamic> relatorioJson) async {
+  Future<bool> trySendRelatorio(
+    Map<String, dynamic> relatorioJson, {
+    int? localId,
+  }) async {
+    if (localId != null) {
+      if (_inFlightIds.contains(localId)) {
+        return false;
+      }
+      _inFlightIds.add(localId);
+    }
+
     final auth = await _getAuth();
     final token = auth?['token'] as String?;
 
@@ -82,6 +93,10 @@ class SyncService {
       return false;
     } catch (e) {
       return false;
+    } finally {
+      if (localId != null) {
+        _inFlightIds.remove(localId);
+      }
     }
   }
 
@@ -92,7 +107,7 @@ class SyncService {
       final dadosJson = record['dados_json'] as String;
       final Map<String, dynamic> payload = jsonDecode(dadosJson);
 
-      final success = await trySendRelatorio(payload);
+      final success = await trySendRelatorio(payload, localId: id);
       if (success) {
         await AppDatabase.instance.marcarComoSincronizado(id);
         return true;

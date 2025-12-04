@@ -93,6 +93,7 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
   bool _possuiNecessidadesEspeciais = false;
   bool _possuiDesaparecidos = false;
   bool _possuiFeridos = false;
+  bool _isSubmitting = false;
 
   final _cpfFormatter = _CpfInputFormatter();
 
@@ -121,10 +122,21 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
     }
   }
 
+  void _setSubmitting(bool value) {
+    if (mounted) {
+      setState(() => _isSubmitting = value);
+    } else {
+      _isSubmitting = value;
+    }
+  }
+
   Future<void> _salvarFormulario() async {
+    if (_isSubmitting) return;
     if (!(_formKey.currentState?.validate() ?? true)) {
       return;
     }
+
+    _setSubmitting(true);
 
     if (_latitude == null || _longitude == null) {
       final sucessoLocalizacao = await _capturarLocalizacao(showFeedback: false);
@@ -219,10 +231,9 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
 
     final dadosJson = jsonEncode(payload);
 
-    AppDatabase.instance
-        .salvarFormulario(tipo: 'familia', dadosJson: dadosJson)
-        .then((id) async {
-      final enviado = await SyncService.instance.trySendRelatorio(payload);
+    try {
+      final id = await AppDatabase.instance.salvarFormulario(tipo: 'familia', dadosJson: dadosJson);
+      final enviado = await SyncService.instance.trySendRelatorio(payload, localId: id);
 
       if (enviado) {
         await AppDatabase.instance.marcarComoSincronizado(id);
@@ -236,11 +247,13 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
           _retornarAposSalvar();
         }
       }
-    }).catchError((error) {
+    } catch (error) {
       if (mounted) {
         _mostrarSnack('Erro ao salvar formulário: $error', sucesso: false);
       }
-    });
+    } finally {
+      _setSubmitting(false);
+    }
   }
 
   void _mostrarSnack(String mensagem, {bool sucesso = true}) {
@@ -480,10 +493,17 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: () {
-              _salvarFormulario();
-            },
+            icon: _isSubmitting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.save),
+            onPressed: _isSubmitting ? null : _salvarFormulario,
           )
         ],
       ),
@@ -718,12 +738,19 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       ),
 
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: Colors.orange.shade700,
-        onPressed: () {
-          _salvarFormulario();
-        },
-        icon: const Icon(Icons.save),
-        label: const Text("Salvar"),
+        backgroundColor: _isSubmitting ? Colors.grey : Colors.orange.shade700,
+        onPressed: _isSubmitting ? null : _salvarFormulario,
+        icon: _isSubmitting
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.save),
+        label: Text(_isSubmitting ? 'Salvando...' : 'Salvar'),
       ),
     );
   }
