@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'dart:io';
 
 class ApiService {
   static const String _baseUrl = 'https://relatoriosoffline.app/api';
+  //static const String _baseUrl = 'http://192.168.0.101:8084/api';
   static String customBaseUrl = '';
 
   static String getBaseUrl() {
@@ -40,6 +42,18 @@ class ApiService {
       }
 
       return null;
+    } on SocketException {
+      throw Exception(
+        'Sem conexão com a internet. Verifique sua rede e tente novamente.',
+      );
+    } on TimeoutException {
+      throw Exception(
+        'O servidor demorou para responder. Tente novamente em instantes.',
+      );
+    } on http.ClientException {
+      throw Exception(
+        'Não conseguimos comunicar com o servidor. Por favor, tente novamente.',
+      );
     } catch (e) {
       rethrow;
     }

@@ -64,12 +64,12 @@ class _LoginPageState extends State<LoginPage> {
       }
     } catch (e) {
       if (!mounted) return;
-      print('❌ Erro capturado no login: $e');
+      final mensagem = e.toString().replaceFirst('Exception: ', '');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erro ao conectar: ${e.toString()}'),
+          content: Text('Erro ao conectar: $mensagem'),
           backgroundColor: Colors.red,
-          duration: const Duration(seconds: 5),
+          duration: const Duration(seconds: 6),
         ),
       );
     } finally {

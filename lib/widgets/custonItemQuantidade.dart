@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class CustomItemQuantidade extends StatefulWidget {
   final String label;
@@ -31,8 +32,6 @@ class _CustomItemQuantidadeState extends State<CustomItemQuantidade> {
     marcado = texto.toLowerCase() == "sim";
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -63,6 +62,7 @@ class _CustomItemQuantidadeState extends State<CustomItemQuantidade> {
             child: TextFormField(
               controller: widget.controllerQuantidade,
               keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: InputDecoration(
                 labelText: "Qtd",
                 border: OutlineInputBorder(

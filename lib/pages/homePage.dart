@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:relatoriooffline/core/database/app_database.dart';
+import 'package:relatoriooffline/services/syncService.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -12,6 +13,7 @@ class _HomePageState extends State<HomePage> {
   String _username = '';
   int _pendentesCount = 0;
   int _enviadosCount = 0;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -64,6 +66,33 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _handleRefresh() async {
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+    try {
+      final pendentesAntes = _pendentesCount;
+      await SyncService.instance.syncPending();
+      await _carregarDados();
+      if (!mounted) return;
+      final pendentesDepois = _pendentesCount;
+
+      if (pendentesAntes == 0) {
+        _showSnack('Nenhum formulário pendente para sincronizar.');
+      } else if (pendentesDepois < pendentesAntes) {
+        final sincronizados = pendentesAntes - pendentesDepois;
+        _showSnack('$sincronizados formulário(s) pendente(s) sincronizado(s).');
+      } else {
+        _showSnack('Ainda restam $pendentesDepois formulário(s) pendente(s).', sucesso: false);
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnack('Não foi possível sincronizar agora. Tente novamente.', sucesso: false);
+      }
+    } finally {
+      _isRefreshing = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -80,7 +109,7 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _carregarDados,
+        onRefresh: _handleRefresh,
         color: Colors.orange.shade700,
         child: ListView(
           padding: const EdgeInsets.all(24),
@@ -298,5 +327,25 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-}
 
+  void _showSnack(String mensagem, {bool sucesso = true}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: sucesso ? Colors.green.shade600 : Colors.red.shade700,
+        content: Row(
+          children: [
+            Icon(
+              sucesso ? Icons.cloud_done : Icons.cloud_off,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(mensagem)),
+          ],
+        ),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+}

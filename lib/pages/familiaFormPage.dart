@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter/services.dart';
 
 import 'package:relatoriooffline/widgets/customDropdown.dart';
 import 'package:relatoriooffline/widgets/custonItemQuantidade.dart';
@@ -52,6 +53,7 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
     'medicamento': TextEditingController(),
     'possuiDesaparecidos': TextEditingController(),
     'quantidadeDesaparecidos': TextEditingController(),
+    'possuiFeridos': TextEditingController(),
     'quantidadeFeridos': TextEditingController(),
     'quantidadeObitos': TextEditingController(),
 
@@ -88,6 +90,11 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
   double? _longitude;
   Uint8List? _fotoResidencia;
   final ImagePicker _picker = ImagePicker();
+  bool _possuiNecessidadesEspeciais = false;
+  bool _possuiDesaparecidos = false;
+  bool _possuiFeridos = false;
+
+  final _cpfFormatter = _CpfInputFormatter();
 
   String _formatarData(DateTime data) {
     final dia = data.day.toString().padLeft(2, '0');
@@ -177,14 +184,20 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       'menores13a17': toInt(_controllers['menores13a17']!.text),
       'maiores18a59': toInt(_controllers['maiores18a59']!.text),
       'idosos60mais': toInt(_controllers['idosos60mais']!.text),
-      'possuiNecessidadesEspeciais': toBool(_controllers['possuiNecessidadesEspeciais']!.text) ?? false,
-      'quantidadeNecessidadesEspeciais': toInt(_controllers['quantidadeNecessidadesEspeciais']!.text),
+      'possuiNecessidadesEspeciais': _possuiNecessidadesEspeciais,
+      'quantidadeNecessidadesEspeciais': _possuiNecessidadesEspeciais
+          ? toInt(_controllers['quantidadeNecessidadesEspeciais']!.text)
+          : 0,
       'observacaoNecessidades': _controllers['observacaoNecessidades']!.text,
       'usoMedicamentoContinuo': toBool(_controllers['usoMedicamentoContinuo']!.text) ?? false,
       'medicamento': _controllers['medicamento']!.text,
-      'possuiDesaparecidos': toBool(_controllers['possuiDesaparecidos']!.text) ?? false,
-      'quantidadeDesaparecidos': toInt(_controllers['quantidadeDesaparecidos']!.text),
-      'quantidadeFeridos': toInt(_controllers['quantidadeFeridos']!.text),
+      'possuiDesaparecidos': _possuiDesaparecidos,
+      'quantidadeDesaparecidos': _possuiDesaparecidos
+          ? toInt(_controllers['quantidadeDesaparecidos']!.text)
+          : 0,
+      'quantidadeFeridos': _possuiFeridos
+          ? toInt(_controllers['quantidadeFeridos']!.text)
+          : 0,
       'quantidadeObitos': toInt(_controllers['quantidadeObitos']!.text),
       'qtdAguaPotavel5L': toInt(_controllers['qtdAguaPotavel5LQtd']!.text) ?? 0,
       'qtdColchoesSolteiro': toInt(_controllers['qtdColchoesSolteiroQtd']!.text) ?? 0,
@@ -214,22 +227,48 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       if (enviado) {
         await AppDatabase.instance.marcarComoSincronizado(id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Formulário sincronizado com sucesso.')),
-          );
+          _mostrarSnack('Formulário sincronizado com sucesso.');
+          _retornarAposSalvar();
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Sem conexão: formulário salvo como pendente.')),
-          );
+          _mostrarSnack('Sem conexão: formulário salvo como pendente.', sucesso: false);
+          _retornarAposSalvar();
         }
       }
     }).catchError((error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao salvar formulário: $error')),
-        );
+        _mostrarSnack('Erro ao salvar formulário: $error', sucesso: false);
+      }
+    });
+  }
+
+  void _mostrarSnack(String mensagem, {bool sucesso = true}) {
+    if (!mounted) return;
+    final cor = sucesso ? Colors.green.shade600 : Colors.red.shade700;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: cor,
+        content: Row(
+          children: [
+            Icon(
+              sucesso ? Icons.check_circle : Icons.error_outline,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(mensagem)),
+          ],
+        ),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _retornarAposSalvar() {
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context, true);
       }
     });
   }
@@ -248,11 +287,21 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
     );
   }
 
-  Widget _campo(String key, {String? label, bool obrigatorio = false}) {
+  Widget _campo(
+    String key, {
+    String? label,
+    bool obrigatorio = false,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
         controller: _controllers[key],
+        keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        textCapitalization: textCapitalization,
         decoration: InputDecoration(
           labelText: label ?? key,
           border: OutlineInputBorder(
@@ -338,12 +387,6 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
     );
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _capturarLocalizacao();
-  }
-
   Future<bool> _capturarLocalizacao({bool showFeedback = true}) async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
@@ -386,6 +429,49 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _possuiNecessidadesEspeciais = _normalizeBool(_controllers['possuiNecessidadesEspeciais']!.text);
+    _possuiDesaparecidos = _normalizeBool(_controllers['possuiDesaparecidos']!.text);
+    _possuiFeridos = _normalizeBool(_controllers['possuiFeridos']!.text);
+    _capturarLocalizacao();
+  }
+
+  bool _normalizeBool(String? value) {
+    if (value == null) return false;
+    final normalized = value.toLowerCase();
+    return normalized == 'sim' || normalized == 'true' || normalized == '1';
+  }
+
+  void _updatePossui(String key, bool value, {TextEditingController? quantidadeController}) {
+    setState(() {
+      switch (key) {
+        case 'necessidades':
+          _possuiNecessidadesEspeciais = value;
+          break;
+        case 'desaparecidos':
+          _possuiDesaparecidos = value;
+          break;
+        case 'feridos':
+          _possuiFeridos = value;
+          break;
+      }
+    });
+
+    _controllers[
+      key == 'necessidades'
+          ? 'possuiNecessidadesEspeciais'
+          : key == 'desaparecidos'
+              ? 'possuiDesaparecidos'
+              : 'possuiFeridos'
+    ]?.text = value ? 'Sim' : 'Não';
+
+    if (!value && quantidadeController != null) {
+      quantidadeController.text = '';
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -410,7 +496,10 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
 
             _tituloSecao("Identificação do Atingido"),
             _campo('nomeAtingido', label: "Nome", obrigatorio: true),
-            _campo('cpfAtingido', label: "CPF"),
+            _campo('cpfAtingido',
+                label: "CPF",
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly, _cpfFormatter]),
             _campo('rgAtingido', label: "RG"),
             _campoDataNascimento(),
             _campo('enderecoAtingido', label: "Endereço"),
@@ -467,19 +556,44 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
 
 
             _tituloSecao("Pessoas na Residência"),
-            _campo('numeroTotalPessoas', label: "Número Total de Pessoas"),
-            _campo('menores0a12', label: "Menores 0 a 12"),
-            _campo('menores13a17', label: "Menores 13 a 17"),
-            _campo('maiores18a59', label: "Maiores 18 a 59"),
-            _campo('idosos60mais', label: "Idosos 60+"),
+            _campo('numeroTotalPessoas',
+                label: "Número Total de Pessoas",
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+            _campo('menores0a12',
+                label: "Menores 0 a 12",
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+            _campo('menores13a17',
+                label: "Menores 13 a 17",
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+            _campo('maiores18a59',
+                label: "Maiores 18 a 59",
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+            _campo('idosos60mais',
+                label: "Idosos 60+",
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
 
             CustomDropdown(
               label: "Necessidades Especiais",
               controller: _controllers["possuiNecessidadesEspeciais"]!,
               opcoes: ["Sim", "Não"],
+              onChanged: (value) {
+                final possui = (value ?? '').toLowerCase() == 'sim';
+                _updatePossui('necessidades', possui,
+                    quantidadeController: _controllers['quantidadeNecessidadesEspeciais']);
+              },
             ),
 
-            _campo("quantidadeNecessidadesEspeciais", label: "Quantidade"),
+            if (_possuiNecessidadesEspeciais)
+              _campo("quantidadeNecessidadesEspeciais",
+                  label: "Quantidade",
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+
             _campo("observacaoNecessidades", label: "Observações"),
 
             CustomDropdown(
@@ -492,12 +606,40 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
               label: "Possui Desaparecidos?",
               controller: _controllers["possuiDesaparecidos"]!,
               opcoes: ["Sim", "Não"],
+              onChanged: (value) {
+                final possui = (value ?? '').toLowerCase() == 'sim';
+                _updatePossui('desaparecidos', possui,
+                    quantidadeController: _controllers['quantidadeDesaparecidos']);
+              },
             ),
 
+            if (_possuiDesaparecidos)
+              _campo("quantidadeDesaparecidos",
+                  label: "Quantidade Desaparecidos",
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
 
-            _campo("quantidadeDesaparecidos", label: "Quantidade Desaparecidos"),
-            _campo("quantidadeFeridos", label: "Quantidade Feridos"),
-            _campo("quantidadeObitos", label: "Quantidade Óbitos"),
+            CustomDropdown(
+              label: "Possui Feridos?",
+              controller: _controllers["possuiFeridos"]!,
+              opcoes: ["Sim", "Não"],
+              onChanged: (value) {
+                final possui = (value ?? '').toLowerCase() == 'sim';
+                _updatePossui('feridos', possui,
+                    quantidadeController: _controllers['quantidadeFeridos']);
+              },
+            ),
+
+            if (_possuiFeridos)
+              _campo("quantidadeFeridos",
+                  label: "Quantidade Feridos",
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+
+            _campo("quantidadeObitos",
+                label: "Quantidade Óbitos",
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
 
             _tituloSecao("Assistência Humanitária - Necessidades Imediatas"),
 
@@ -592,5 +734,34 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       controller.dispose();
     }
     super.dispose();
+  }
+}
+
+class _CpfInputFormatter extends TextInputFormatter {
+  static const _maxLength = 11;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final limited = digits.length > _maxLength ? digits.substring(0, _maxLength) : digits;
+
+    final buffer = StringBuffer();
+    for (var i = 0; i < limited.length; i++) {
+      buffer.write(limited[i]);
+      if ((i == 2 || i == 5) && i != limited.length - 1) {
+        buffer.write('.');
+      } else if (i == 8 && i != limited.length - 1) {
+        buffer.write('-');
+      }
+    }
+
+    final formatted = buffer.toString();
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
   }
 }
