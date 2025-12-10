@@ -17,6 +17,11 @@ class SyncService {
   bool _isSyncing = false;
   final Set<int> _inFlightIds = <int>{};
 
+  static const int _maxRetries = 3;
+  static const Duration _initialRetryDelay = Duration(seconds: 2);
+  static const Duration _connectionStabilizationDelay = Duration(seconds: 3);
+  static const Duration _requestTimeout = Duration(seconds: 30);
+
   bool _hasConnection(dynamic status) {
     if (status is ConnectivityResult) {
       return status != ConnectivityResult.none;
@@ -32,9 +37,13 @@ class SyncService {
     _monitoringStarted = true;
 
     _connectivitySubscription = _connectivity.onConnectivityChanged.listen(
-      (status) {
+      (status) async {
         if (_hasConnection(status)) {
-          unawaited(syncPending());
+          await Future.delayed(_connectionStabilizationDelay);
+          final current = await _connectivity.checkConnectivity();
+          if (_hasConnection(current)) {
+            unawaited(syncPending());
+          }
         }
       },
     );
@@ -70,25 +79,53 @@ class SyncService {
     final token = auth?['token'] as String?;
 
     if (token == null || token.isEmpty) {
+      if (localId != null) _inFlightIds.remove(localId);
       return false;
     }
 
-    // Use ApiService base URL
     final base = ApiService.getBaseUrl();
     final uri = Uri.parse('$base/relatorios/criar');
 
     try {
-      final response = await http.post(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode(relatorioJson),
-      ).timeout(const Duration(seconds: 15));
+      for (int attempt = 0; attempt < _maxRetries; attempt++) {
+        try {
+          final connectivity = await _connectivity.checkConnectivity();
+          if (!_hasConnection(connectivity)) {
+            break;
+          }
 
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return true;
+          final response = await http.post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode(relatorioJson),
+          ).timeout(_requestTimeout);
+
+          if (response.statusCode >= 200 && response.statusCode < 300) {
+            return true;
+          }
+
+          if (response.statusCode >= 500 && attempt < _maxRetries - 1) {
+            await Future.delayed(_initialRetryDelay * (attempt + 1));
+            continue;
+          }
+
+          return false;
+        } on TimeoutException {
+          if (attempt < _maxRetries - 1) {
+            await Future.delayed(_initialRetryDelay * (attempt + 1));
+            continue;
+          }
+          return false;
+        } on http.ClientException {
+          if (attempt < _maxRetries - 1) {
+            await Future.delayed(_initialRetryDelay * (attempt + 1));
+            continue;
+          }
+          return false;
+        }
       }
       return false;
     } catch (e) {
@@ -100,8 +137,6 @@ class SyncService {
     }
   }
 
-  /// Tenta sincronizar um formulário já salvo na base local (registro da tabela formularios).
-  /// Se conseguir enviar para o backend, marca como sincronizado.
   Future<bool> trySyncAndMark(int id, Map<String, dynamic> record) async {
     try {
       final dadosJson = record['dados_json'] as String;
@@ -118,7 +153,6 @@ class SyncService {
     return false;
   }
 
-  /// Percorre todos os formularios pendentes e tenta enviar.
   Future<void> syncPending() async {
     if (_isSyncing) return;
     _isSyncing = true;

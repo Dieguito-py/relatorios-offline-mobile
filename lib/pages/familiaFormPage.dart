@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 
 import 'package:relatoriooffline/widgets/customDropdown.dart';
 import 'package:relatoriooffline/widgets/custonItemQuantidade.dart';
@@ -96,6 +97,19 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
   bool _isSubmitting = false;
 
   final _cpfFormatter = _CpfInputFormatter();
+  late final NumberFormat _currencyFormat;
+  late final _CurrencyInputFormatter _currencyInputFormatter;
+
+  @override
+  void initState() {
+    super.initState();
+    _currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+    _currencyInputFormatter = _CurrencyInputFormatter(_currencyFormat);
+    _possuiNecessidadesEspeciais = _normalizeBool(_controllers['possuiNecessidadesEspeciais']!.text);
+    _possuiDesaparecidos = _normalizeBool(_controllers['possuiDesaparecidos']!.text);
+    _possuiFeridos = _normalizeBool(_controllers['possuiFeridos']!.text);
+    _capturarLocalizacao();
+  }
 
   String _formatarData(DateTime data) {
     final dia = data.day.toString().padLeft(2, '0');
@@ -161,6 +175,15 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       return double.tryParse(value.replaceAll(',', '.'));
     }
 
+    double? _parseCurrency(String? value) {
+      if (value == null || value.isEmpty) return null;
+      final cleaned = value.replaceAll(RegExp(r'[^0-9]'), '');
+      if (cleaned.isEmpty) return null;
+      final cents = double.tryParse(cleaned);
+      if (cents == null) return null;
+      return cents / 100;
+    }
+
     bool? toBool(String? value) {
       if (value == null || value.isEmpty) return null;
       final normalized = value.toLowerCase();
@@ -185,8 +208,8 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       'localizacao': _controllers['localizacao']!.text,
       'moradia': _controllers['moradia']!.text,
       'danoResidencia': _controllers['danoResidencia']!.text,
-      'estimativaDanoMoveis': toDouble(_controllers['estimativaDanoMoveis']!.text),
-      'estimativaDanoEdificacao': toDouble(_controllers['estimativaDanoEdificacao']!.text),
+      'estimativaDanoMoveis': _parseCurrency(_controllers['estimativaDanoMoveis']!.text),
+      'estimativaDanoEdificacao': _parseCurrency(_controllers['estimativaDanoEdificacao']!.text),
       'ocupacao': _controllers['ocupacao']!.text,
       'tipoConstrucao': _controllers['tipoConstrucao']!.text,
       'alternativaMoradia': _controllers['alternativaMoradia']!.text,
@@ -441,15 +464,6 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
     return true;
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _possuiNecessidadesEspeciais = _normalizeBool(_controllers['possuiNecessidadesEspeciais']!.text);
-    _possuiDesaparecidos = _normalizeBool(_controllers['possuiDesaparecidos']!.text);
-    _possuiFeridos = _normalizeBool(_controllers['possuiFeridos']!.text);
-    _capturarLocalizacao();
-  }
-
   bool _normalizeBool(String? value) {
     if (value == null) return false;
     final normalized = value.toLowerCase();
@@ -545,6 +559,15 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
               label: "Danos na Residência",
               controller: _controllers["danoResidencia"]!,
               opcoes: ["Danos Parcial", "Dano Total", "Sem Dano"],
+            ),
+
+            _campoMonetario(
+              'estimativaDanoMoveis',
+              label: 'Estimativa de Dano em Móveis',
+            ),
+            _campoMonetario(
+              'estimativaDanoEdificacao',
+              label: 'Estimativa de Dano na Edificação',
             ),
 
             CustomDropdown(
@@ -755,6 +778,24 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
     );
   }
 
+  Widget _campoMonetario(String key, {required String label}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: TextFormField(
+        controller: _controllers[key],
+        keyboardType: TextInputType.number,
+        inputFormatters: [_currencyInputFormatter],
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: 'R\$ 0,00',
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     for (var controller in _controllers.values) {
@@ -792,3 +833,29 @@ class _CpfInputFormatter extends TextInputFormatter {
     );
   }
 }
+
+class _CurrencyInputFormatter extends TextInputFormatter {
+  _CurrencyInputFormatter(this._formatter);
+
+  final NumberFormat _formatter;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) {
+      return const TextEditingValue(text: '', selection: TextSelection.collapsed(offset: 0));
+    }
+
+    final value = double.parse(digits) / 100;
+    final formatted = _formatter.format(value);
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
