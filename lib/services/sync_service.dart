@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:relatoriooffline/core/database/app_database.dart';
-import 'package:relatoriooffline/services/apiService.dart';
+import 'package:relatoriooffline/services/api_service.dart';
 
 class SyncService {
   static final SyncService instance = SyncService._init();

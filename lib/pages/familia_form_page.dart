@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
-import 'package:relatoriooffline/widgets/customDropdown.dart';
-import 'package:relatoriooffline/widgets/custonItemQuantidade.dart';
+import 'package:relatoriooffline/widgets/custom_dropdown.dart';
+import 'package:relatoriooffline/widgets/custon_item_quantidade.dart';
 import 'package:relatoriooffline/core/database/app_database.dart';
-import 'package:relatoriooffline/services/syncService.dart';
+import 'package:relatoriooffline/services/sync_service.dart';
 
 class FamiliaFormPage extends StatefulWidget {
   const FamiliaFormPage({super.key});
@@ -161,6 +159,7 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       }
     }
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Salvando formulário...')),
     );
@@ -170,12 +169,7 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       return int.tryParse(value);
     }
 
-    double? toDouble(String? value) {
-      if (value == null || value.isEmpty) return null;
-      return double.tryParse(value.replaceAll(',', '.'));
-    }
-
-    double? _parseCurrency(String? value) {
+    double? parseCurrency(String? value) {
       if (value == null || value.isEmpty) return null;
       final cleaned = value.replaceAll(RegExp(r'[^0-9]'), '');
       if (cleaned.isEmpty) return null;
@@ -208,8 +202,8 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       'localizacao': _controllers['localizacao']!.text,
       'moradia': _controllers['moradia']!.text,
       'danoResidencia': _controllers['danoResidencia']!.text,
-      'estimativaDanoMoveis': _parseCurrency(_controllers['estimativaDanoMoveis']!.text),
-      'estimativaDanoEdificacao': _parseCurrency(_controllers['estimativaDanoEdificacao']!.text),
+      'estimativaDanoMoveis': parseCurrency(_controllers['estimativaDanoMoveis']!.text),
+      'estimativaDanoEdificacao': parseCurrency(_controllers['estimativaDanoEdificacao']!.text),
       'ocupacao': _controllers['ocupacao']!.text,
       'tipoConstrucao': _controllers['tipoConstrucao']!.text,
       'alternativaMoradia': _controllers['alternativaMoradia']!.text,

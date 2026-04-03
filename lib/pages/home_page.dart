@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:relatoriooffline/core/database/app_database.dart';
-import 'package:relatoriooffline/services/syncService.dart';
+import 'package:relatoriooffline/services/sync_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -144,7 +144,7 @@ class _HomePageState extends State<HomePage> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
@@ -249,12 +249,12 @@ class _HomePageState extends State<HomePage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: color?.withOpacity(0.3) ?? Colors.grey.shade300,
+            color: color?.withValues(alpha: 0.3) ?? Colors.grey.shade300,
             width: 2,
           ),
           boxShadow: [
             BoxShadow(
-              color: (color ?? Colors.grey).withOpacity(0.1),
+              color: (color ?? Colors.grey).withValues(alpha: 0.1),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -268,7 +268,7 @@ class _HomePageState extends State<HomePage> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: buttonColor.withOpacity(0.1),
+                    color: buttonColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(

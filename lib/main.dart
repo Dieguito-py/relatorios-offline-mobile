@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:relatoriooffline/pages/configuracoesPage.dart';
-import 'package:relatoriooffline/pages/loginPage.dart';
-import 'package:relatoriooffline/pages/homePage.dart';
-import 'package:relatoriooffline/pages/menuFormularioPage.dart';
-import 'package:relatoriooffline/pages/familiaFormPage.dart';
-import 'package:relatoriooffline/pages/reciboFormPage.dart';
-import 'package:relatoriooffline/pages/pendentesPage.dart';
-import 'package:relatoriooffline/pages/enviadosPage.dart';
+import 'package:relatoriooffline/pages/login_page.dart';
+import 'package:relatoriooffline/pages/home_page.dart';
+import 'package:relatoriooffline/pages/menu_formulario_page.dart';
+import 'package:relatoriooffline/pages/familia_form_page.dart';
+import 'package:relatoriooffline/pages/recibo_form_page.dart';
+import 'package:relatoriooffline/pages/pendentes_page.dart';
+import 'package:relatoriooffline/pages/enviados_page.dart';
 import 'package:relatoriooffline/core/database/app_database.dart';
-import 'package:relatoriooffline/services/syncService.dart';
+import 'package:relatoriooffline/services/sync_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,7 +44,6 @@ class MyApp extends StatelessWidget {
         '/recibo_form': (context) => const ReciboFormPage(),
         '/pendentes': (context) => const PendentesPage(),
         '/enviados': (context) => const EnviadosPage(),
-        '/configuracoes': (context) => const ConfiguracoesPage(),
       },
     );
   }
@@ -94,7 +92,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
+                    color: Colors.black.withValues(alpha: 0.2),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:relatoriooffline/core/database/app_database.dart';
-import 'package:relatoriooffline/services/syncService.dart';
+import 'package:relatoriooffline/services/sync_service.dart';
 
 class PendentesPage extends StatefulWidget {
   const PendentesPage({super.key});
