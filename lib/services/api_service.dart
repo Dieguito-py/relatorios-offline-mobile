@@ -6,8 +6,8 @@ import 'package:http/io_client.dart';
 import 'package:flutter/foundation.dart';
 
 class ApiService {
-  static const String _baseUrl = 'https://relatoriosoffline.app/api';
-  //static const String _baseUrl = 'http://192.168.0.101:8084/api';
+  //static const String _baseUrl = 'https://relatoriosoffline.app/api';
+  static const String _baseUrl = 'http://192.168.1.136:8084/api';
   static String customBaseUrl = '';
   static bool allowSelfSignedCert = !kReleaseMode;
 

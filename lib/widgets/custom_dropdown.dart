@@ -18,13 +18,21 @@ class CustomDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final selectedValue = controller.text.isEmpty ? null : controller.text;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: DropdownButtonFormField<String>(
-        initialValue: controller.text.isEmpty ? null : controller.text,
+        initialValue: selectedValue,
+        isExpanded: true,
         decoration: InputDecoration(
-          labelText: label,
+          labelText: obrigatorio ? '$label *' : label,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          filled: true,
+          fillColor: Theme.of(context)
+              .colorScheme
+              .surfaceContainerHighest
+              .withValues(alpha: 0.25),
         ),
         items: opcoes
             .map((op) => DropdownMenuItem(

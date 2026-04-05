@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
@@ -85,6 +86,11 @@ class SyncService {
 
     final base = ApiService.getBaseUrl();
     final uri = Uri.parse('$base/relatorios/criar');
+    final imagens = _extrairImagens(relatorioJson);
+    final payloadSemImagens = Map<String, dynamic>.from(relatorioJson)
+      ..remove('fotoResidencia')
+      ..remove('fotosResidencia');
+    final client = http.Client();
 
     try {
       for (int attempt = 0; attempt < _maxRetries; attempt++) {
@@ -94,14 +100,30 @@ class SyncService {
             break;
           }
 
-          final response = await http.post(
-            uri,
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-            body: jsonEncode(relatorioJson),
-          ).timeout(_requestTimeout);
+          final request = http.MultipartRequest('POST', uri)
+            ..headers['Authorization'] = 'Bearer $token';
+
+          payloadSemImagens.forEach((key, value) {
+            if (value == null) return;
+            if (value is List || value is Map) {
+              request.fields[key] = jsonEncode(value);
+              return;
+            }
+            request.fields[key] = value.toString();
+          });
+
+          for (var i = 0; i < imagens.length; i++) {
+            request.files.add(
+              http.MultipartFile.fromBytes(
+                'fotosResidencia',
+                imagens[i],
+                filename: 'residencia_${i + 1}.jpg',
+              ),
+            );
+          }
+
+          final streamedResponse = await client.send(request).timeout(_requestTimeout);
+          final response = await http.Response.fromStream(streamedResponse);
 
           if (response.statusCode >= 200 && response.statusCode < 300) {
             return true;
@@ -131,10 +153,39 @@ class SyncService {
     } catch (e) {
       return false;
     } finally {
+      client.close();
       if (localId != null) {
         _inFlightIds.remove(localId);
       }
     }
+  }
+
+  List<Uint8List> _extrairImagens(Map<String, dynamic> payload) {
+    final imagens = <Uint8List>[];
+
+    final fotosMultiplas = payload['fotosResidencia'];
+    if (fotosMultiplas is List) {
+      for (final item in fotosMultiplas) {
+        if (item is String && item.isNotEmpty) {
+          try {
+            imagens.add(base64Decode(item));
+          } catch (_) {
+            // Ignora imagens inválidas para não bloquear o envio restante.
+          }
+        }
+      }
+    }
+
+    final fotoLegada = payload['fotoResidencia'];
+    if (fotoLegada is String && fotoLegada.isNotEmpty) {
+      try {
+        imagens.add(base64Decode(fotoLegada));
+      } catch (_) {
+        // Ignora base64 inválido legado.
+      }
+    }
+
+    return imagens;
   }
 
   Future<bool> trySyncAndMark(int id, Map<String, dynamic> record) async {

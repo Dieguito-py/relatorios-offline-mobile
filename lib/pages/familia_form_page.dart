@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import 'package:relatoriooffline/widgets/app_form_widgets.dart';
 import 'package:relatoriooffline/widgets/custom_dropdown.dart';
 import 'package:relatoriooffline/widgets/custon_item_quantidade.dart';
 import 'package:relatoriooffline/core/database/app_database.dart';
@@ -87,7 +88,7 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
   DateTime? _dataNascimentoSelecionada;
   double? _latitude;
   double? _longitude;
-  Uint8List? _fotoResidencia;
+  final List<Uint8List> _fotosResidencia = <Uint8List>[];
   final ImagePicker _picker = ImagePicker();
   bool _possuiNecessidadesEspeciais = false;
   bool _possuiDesaparecidos = false;
@@ -97,6 +98,18 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
   final _cpfFormatter = _CpfInputFormatter();
   late final NumberFormat _currencyFormat;
   late final _CurrencyInputFormatter _currencyInputFormatter;
+  final Set<String> _camposObrigatorios = {
+    'nomeAtingido',
+    'cpfAtingido',
+    'dataNascimentoAtingido',
+    'enderecoAtingido',
+    'cidadeAtingido',
+    'localizacao',
+    'moradia',
+    'danoResidencia',
+    'numeroTotalPessoas',
+    'usoMedicamentoContinuo',
+  };
 
   @override
   void initState() {
@@ -142,9 +155,101 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
     }
   }
 
+  void _mostrarMensagemTopo(String mensagem, {bool sucesso = false}) {
+    if (!mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final cor = sucesso ? Colors.green.shade600 : Colors.red.shade700;
+
+    messenger
+      ..hideCurrentMaterialBanner()
+      ..showMaterialBanner(
+        MaterialBanner(
+          backgroundColor: cor,
+          content: Text(
+            mensagem,
+            style: const TextStyle(color: Colors.white),
+          ),
+          leading: Icon(
+            sucesso ? Icons.check_circle : Icons.error_outline,
+            color: Colors.white,
+          ),
+          actions: [
+            TextButton(
+              onPressed: messenger.hideCurrentMaterialBanner,
+              child: const Text(
+                'Fechar',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      );
+
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) {
+        messenger.hideCurrentMaterialBanner();
+      }
+    });
+  }
+
+  bool _validarObrigatoriosNoSubmit() {
+    const labelsObrigatorios = <String, String>{
+      'nomeAtingido': 'Nome',
+      'cpfAtingido': 'CPF',
+      'dataNascimentoAtingido': 'Data de Nascimento',
+      'enderecoAtingido': 'Endereço',
+      'cidadeAtingido': 'Cidade',
+      'localizacao': 'Localização',
+      'moradia': 'Moradia',
+      'danoResidencia': 'Danos na Residência',
+      'numeroTotalPessoas': 'Número Total de Pessoas',
+      'usoMedicamentoContinuo': 'Uso de Medicamento Contínuo',
+    };
+
+    for (final entry in labelsObrigatorios.entries) {
+      final valor = _controllers[entry.key]?.text.trim() ?? '';
+      if (valor.isEmpty) {
+        _mostrarMensagemTopo('Preencha o campo obrigatório: ${entry.value}.');
+        return false;
+      }
+    }
+
+    final cpfDigits = (_controllers['cpfAtingido']?.text ?? '').replaceAll(RegExp(r'\D'), '');
+    if (cpfDigits.length != 11) {
+      _mostrarMensagemTopo('CPF inválido. Informe os 11 dígitos.');
+      return false;
+    }
+
+    final totalPessoas = int.tryParse(_controllers['numeroTotalPessoas']?.text ?? '');
+    if (totalPessoas == null || totalPessoas <= 0) {
+      _mostrarMensagemTopo('Informe um número total de pessoas válido.');
+      return false;
+    }
+
+    if (_possuiNecessidadesEspeciais && (_controllers['quantidadeNecessidadesEspeciais']?.text.trim().isEmpty ?? true)) {
+      _mostrarMensagemTopo('Informe a quantidade de necessidades especiais.');
+      return false;
+    }
+
+    if (_possuiDesaparecidos && (_controllers['quantidadeDesaparecidos']?.text.trim().isEmpty ?? true)) {
+      _mostrarMensagemTopo('Informe a quantidade de desaparecidos.');
+      return false;
+    }
+
+    if (_possuiFeridos && (_controllers['quantidadeFeridos']?.text.trim().isEmpty ?? true)) {
+      _mostrarMensagemTopo('Informe a quantidade de feridos.');
+      return false;
+    }
+
+    return true;
+  }
+
   Future<void> _salvarFormulario() async {
     if (_isSubmitting) return;
-    if (!(_formKey.currentState?.validate() ?? true)) {
+    final formValido = _formKey.currentState?.validate() ?? false;
+    final obrigatoriosValidos = _validarObrigatoriosNoSubmit();
+    if (!formValido || !obrigatoriosValidos) {
       return;
     }
 
@@ -243,7 +348,7 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       'coordenadoriaMunicipalId': _controllers['coordenadoriaMunicipalId']!.text,
       'latitude': _latitude?.toString(),
       'longitude': _longitude?.toString(),
-      'fotoResidencia': _fotoResidencia != null ? base64Encode(_fotoResidencia!) : null,
+      'fotosResidencia': _fotosResidencia.map(base64Encode).toList(),
     };
 
     final dadosJson = jsonEncode(payload);
@@ -303,18 +408,28 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
     });
   }
 
-  Widget _tituloSecao(String texto) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Text(
-        texto,
-        style: TextStyle(
-          fontSize: 18,
-          color: Colors.orange.shade700,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
+  String? _validarCampo(String key, String? value) {
+    final texto = value?.trim() ?? '';
+    final obrigatorio = _camposObrigatorios.contains(key);
+    if (obrigatorio && texto.isEmpty) {
+      return 'Campo obrigatório';
+    }
+
+    if (key == 'cpfAtingido' && texto.isNotEmpty) {
+      final digits = texto.replaceAll(RegExp(r'\D'), '');
+      if (digits.length != 11) {
+        return 'CPF inválido';
+      }
+    }
+
+    if (key == 'numeroTotalPessoas' && texto.isNotEmpty) {
+      final total = int.tryParse(texto);
+      if (total == null || total <= 0) {
+        return 'Informe um total válido';
+      }
+    }
+
+    return null;
   }
 
   Widget _campo(
@@ -324,77 +439,145 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
     TextInputType? keyboardType,
     List<TextInputFormatter>? inputFormatters,
     TextCapitalization textCapitalization = TextCapitalization.none,
+    String? Function(String?)? validator,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: TextFormField(
-        controller: _controllers[key],
-        keyboardType: keyboardType,
-        inputFormatters: inputFormatters,
-        textCapitalization: textCapitalization,
-        decoration: InputDecoration(
-          labelText: label ?? key,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-        validator: obrigatorio
-            ? (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Campo obrigatório';
-                }
-                return null;
-              }
-            : null,
-      ),
+    return AppTextFormField(
+      controller: _controllers[key]!,
+      label: label ?? key,
+      obrigatorio: obrigatorio || _camposObrigatorios.contains(key),
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
+      textCapitalization: textCapitalization,
+      validator: validator ?? (value) => _validarCampo(key, value),
     );
   }
 
   Widget _campoDataNascimento() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: TextFormField(
-        controller: _controllers['dataNascimentoAtingido'],
-        readOnly: true,
-        decoration: InputDecoration(
-          labelText: 'Data de Nascimento',
-          suffixIcon: const Icon(Icons.calendar_today),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-        onTap: _selecionarDataNascimento,
-      ),
+    return AppTextFormField(
+      controller: _controllers['dataNascimentoAtingido']!,
+      label: 'Data de Nascimento',
+      obrigatorio: true,
+      readOnly: true,
+      suffixIcon: const Icon(Icons.calendar_today),
+      onTap: _selecionarDataNascimento,
+      validator: (value) => _validarCampo('dataNascimentoAtingido', value),
     );
   }
 
   Future<void> _selecionarFotoResidencia() async {
-    final XFile? imagem = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70, maxWidth: 1600);
-    if (imagem == null) return;
-    final bytes = await imagem.readAsBytes();
+    final List<XFile> imagens = await _picker.pickMultiImage(
+      imageQuality: 70,
+      maxWidth: 1600,
+    );
+    if (imagens.isEmpty) return;
+
+    final novasFotos = await Future.wait(imagens.map((imagem) => imagem.readAsBytes()));
     setState(() {
-      _fotoResidencia = bytes;
+      _fotosResidencia.addAll(novasFotos);
     });
   }
 
+  void _abrirPreviewFoto(int index) {
+    if (index < 0 || index >= _fotosResidencia.length) return;
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(12),
+          child: Stack(
+            children: [
+              InteractiveViewer(
+                minScale: 1,
+                maxScale: 4,
+                child: Image.memory(
+                  _fotosResidencia[index],
+                  fit: BoxFit.contain,
+                  width: double.infinity,
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _previewFotoResidencia() {
-    if (_fotoResidencia == null) {
+    if (_fotosResidencia.isEmpty) {
       return OutlinedButton.icon(
         onPressed: _selecionarFotoResidencia,
-        icon: const Icon(Icons.photo_camera_back),
-        label: const Text('Selecionar foto da residência'),
+        icon: const Icon(Icons.photo_library),
+        label: const Text('Selecionar fotos da residência'),
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.memory(
-            _fotoResidencia!,
-            width: double.infinity,
-            height: 180,
-            fit: BoxFit.cover,
+        Text(
+          '${_fotosResidencia.length} imagem(ns) selecionada(s)',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Toque na miniatura para ampliar',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 120,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _fotosResidencia.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              return Stack(
+                children: [
+                  GestureDetector(
+                    onTap: () => _abrirPreviewFoto(index),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.memory(
+                        _fotosResidencia[index],
+                        width: 120,
+                        height: 120,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                  const Positioned(
+                    left: 6,
+                    bottom: 6,
+                    child: Icon(
+                      Icons.zoom_in,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: InkWell(
+                      onTap: () => setState(() => _fotosResidencia.removeAt(index)),
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Icon(Icons.close, size: 16, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
         const SizedBox(height: 8),
@@ -402,14 +585,14 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
           children: [
             TextButton.icon(
               onPressed: _selecionarFotoResidencia,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Trocar foto'),
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              label: const Text('Adicionar fotos'),
             ),
             const SizedBox(width: 12),
             TextButton.icon(
-              onPressed: () => setState(() => _fotoResidencia = null),
+              onPressed: () => setState(_fotosResidencia.clear),
               icon: const Icon(Icons.delete_outline),
-              label: const Text('Remover'),
+              label: const Text('Remover todas'),
             ),
           ],
         ),
@@ -451,10 +634,8 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
     }
 
     final posicao = await Geolocator.getCurrentPosition();
-    setState(() {
-      _latitude = posicao.latitude;
-      _longitude = posicao.longitude;
-    });
+    _latitude = posicao.latitude;
+    _longitude = posicao.longitude;
     return true;
   }
 
@@ -499,6 +680,7 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
         title: const Text("Cadastro de Família"),
         backgroundColor: Colors.orange.shade700,
         foregroundColor: Colors.white,
+        scrolledUnderElevation: 0,
         actions: [
           IconButton(
             icon: _isSubmitting
@@ -516,241 +698,259 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
         ],
       ),
 
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-
-            _tituloSecao("Identificação do Atingido"),
-            _campo('nomeAtingido', label: "Nome", obrigatorio: true),
-            _campo('cpfAtingido',
-                label: "CPF",
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly, _cpfFormatter]),
-            _campo('rgAtingido', label: "RG"),
-            _campoDataNascimento(),
-            _campo('enderecoAtingido', label: "Endereço"),
-            _campo('bairroAtingido', label: "Bairro"),
-            _campo('cidadeAtingido', label: "Cidade"),
-            _campo('complementoAtingido', label: "Complemento"),
-
-            _tituloSecao("Dados do Imóvel"),
-
-            CustomDropdown(
-              label: "Localização",
-              controller: _controllers["localizacao"]!,
-              opcoes: ["Rural", "Urbana"],
-            ),
-
-            CustomDropdown(
-              label: "Moradia",
-              controller: _controllers["moradia"]!,
-              opcoes: ["Própria", "Alugada"],
-            ),
-
-            CustomDropdown(
-              label: "Danos na Residência",
-              controller: _controllers["danoResidencia"]!,
-              opcoes: ["Danos Parcial", "Dano Total", "Sem Dano"],
-            ),
-
-            _campoMonetario(
-              'estimativaDanoMoveis',
-              label: 'Estimativa de Dano em Móveis',
-            ),
-            _campoMonetario(
-              'estimativaDanoEdificacao',
-              label: 'Estimativa de Dano na Edificação',
-            ),
-
-            CustomDropdown(
-              label: "Ocupação",
-              controller: _controllers["ocupacao"]!,
-              opcoes: ["Regular", "Irregular"],
-            ),
-
-            CustomDropdown(
-              label: "Tipo de Construção",
-              controller: _controllers["tipoConstrucao"]!,
-              opcoes: ["Alvenaria", "Madeira", "Mista"],
-            ),
-
-            CustomDropdown(
-              label: "Alternativa de Moradia",
-              controller: _controllers["alternativaMoradia"]!,
-              opcoes: [
-                "Não Possui",
-                "Possui Outra Casa",
-                "Casa de Parentes/Amigos",
-                "Abrigo Temporário",
-                "Outros"
-              ],
-            ),
-
-
-            _campo("observacaoImovel", label: "Observações"),
-
-
-            _tituloSecao("Pessoas na Residência"),
-            _campo('numeroTotalPessoas',
-                label: "Número Total de Pessoas",
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
-            _campo('menores0a12',
-                label: "Menores 0 a 12",
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
-            _campo('menores13a17',
-                label: "Menores 13 a 17",
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
-            _campo('maiores18a59',
-                label: "Maiores 18 a 59",
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
-            _campo('idosos60mais',
-                label: "Idosos 60+",
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
-
-            CustomDropdown(
-              label: "Necessidades Especiais",
-              controller: _controllers["possuiNecessidadesEspeciais"]!,
-              opcoes: ["Sim", "Não"],
-              onChanged: (value) {
-                final possui = (value ?? '').toLowerCase() == 'sim';
-                _updatePossui('necessidades', possui,
-                    quantidadeController: _controllers['quantidadeNecessidadesEspeciais']);
-              },
-            ),
-
-            if (_possuiNecessidadesEspeciais)
-              _campo("quantidadeNecessidadesEspeciais",
-                  label: "Quantidade",
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
-
-            _campo("observacaoNecessidades", label: "Observações"),
-
-            CustomDropdown(
-              label: "Uso de Medicamento Contínuo",
-              controller: _controllers["usoMedicamentoContinuo"]!,
-              opcoes: ["Sim", "Não"],
-            ),
-
-            CustomDropdown(
-              label: "Possui Desaparecidos?",
-              controller: _controllers["possuiDesaparecidos"]!,
-              opcoes: ["Sim", "Não"],
-              onChanged: (value) {
-                final possui = (value ?? '').toLowerCase() == 'sim';
-                _updatePossui('desaparecidos', possui,
-                    quantidadeController: _controllers['quantidadeDesaparecidos']);
-              },
-            ),
-
-            if (_possuiDesaparecidos)
-              _campo("quantidadeDesaparecidos",
-                  label: "Quantidade Desaparecidos",
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
-
-            CustomDropdown(
-              label: "Possui Feridos?",
-              controller: _controllers["possuiFeridos"]!,
-              opcoes: ["Sim", "Não"],
-              onChanged: (value) {
-                final possui = (value ?? '').toLowerCase() == 'sim';
-                _updatePossui('feridos', possui,
-                    quantidadeController: _controllers['quantidadeFeridos']);
-              },
-            ),
-
-            if (_possuiFeridos)
-              _campo("quantidadeFeridos",
-                  label: "Quantidade Feridos",
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
-
-            _campo("quantidadeObitos",
-                label: "Quantidade Óbitos",
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
-
-            _tituloSecao("Assistência Humanitária - Necessidades Imediatas"),
-
-            CustomItemQuantidade(
-              label: "Água Potável 5L",
-              controllerMarcado: _controllers["qtdAguaPotavel5L"]!,
-              controllerQuantidade: _controllers["qtdAguaPotavel5LQtd"]!,
-            ),
-
-            CustomItemQuantidade(
-              label: "Colchões Solteiro",
-              controllerMarcado: _controllers["qtdColchoesSolteiro"]!,
-              controllerQuantidade: _controllers["qtdColchoesSolteiroQtd"]!,
-            ),
-
-            CustomItemQuantidade(
-              label: "Colchões Casal",
-              controllerMarcado: _controllers["qtdColchoesCasal"]!,
-              controllerQuantidade: _controllers["qtdColchoesCasalQtd"]!,
-            ),
-
-            CustomItemQuantidade(
-              label: "Cesta Básica",
-              controllerMarcado: _controllers["qtdCestasBasicas"]!,
-              controllerQuantidade: _controllers["qtdCestasBasicasQtd"]!,
-            ),
-
-            CustomItemQuantidade(
-              label: "Kit Higiene Pessoal",
-              controllerMarcado: _controllers["qtdKitHigienePessoal"]!,
-              controllerQuantidade: _controllers["qtdKitHigienePessoalQtd"]!,
-            ),
-
-            CustomItemQuantidade(
-              label: "Kit Limpeza",
-              controllerMarcado: _controllers["qtdKitLimpeza"]!,
-              controllerQuantidade: _controllers["qtdKitLimpezaQtd"]!,
-            ),
-
-            CustomItemQuantidade(
-              label: "Móveis",
-              controllerMarcado: _controllers["qtdMoveis"]!,
-              controllerQuantidade: _controllers["qtdMoveisQtd"]!,
-            ),
-
-            CustomItemQuantidade(
-              label: "Roupas",
-              controllerMarcado: _controllers["qtdRoupas"]!,
-              controllerQuantidade: _controllers["qtdRoupasQtd"]!,
-            ),
-
-            CustomItemQuantidade(
-              label: "Telhas 6mm",
-              controllerMarcado: _controllers["qtdTelhas6mm"]!,
-              controllerQuantidade: _controllers["qtdTelhas6mmQtd"]!,
-            ),
-
-            CustomItemQuantidade(
-              label: "Telhas 4mm",
-              controllerMarcado: _controllers["qtdTelhas4mm"]!,
-              controllerQuantidade: _controllers["qtdTelhas4mmQtd"]!,
-            ),
-
-            _campo('outrasNecessidades', label: "Outros Itens"),
-            _campo('observacaoAssistencia', label: "Observações"),
-            const SizedBox(height: 16),
-            Text(
-              'Foto da residência',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            _previewFotoResidencia(),
-
-          ],
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.all(16),
+            children: [
+              AppFormSection(
+                title: 'Identificação do Atingido',
+                children: [
+                  _campo('nomeAtingido', label: 'Nome'),
+                  _campo(
+                    'cpfAtingido',
+                    label: 'CPF',
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, _cpfFormatter],
+                  ),
+                  _campo('rgAtingido', label: 'RG'),
+                  _campoDataNascimento(),
+                  _campo('enderecoAtingido', label: 'Endereço'),
+                  _campo('bairroAtingido', label: 'Bairro'),
+                  _campo('cidadeAtingido', label: 'Cidade'),
+                  _campo('complementoAtingido', label: 'Complemento'),
+                ],
+              ),
+              AppFormSection(
+                title: 'Dados do Imóvel',
+                children: [
+                  CustomDropdown(
+                    label: 'Localização',
+                    controller: _controllers['localizacao']!,
+                    opcoes: const ['Rural', 'Urbana'],
+                    obrigatorio: true,
+                  ),
+                  CustomDropdown(
+                    label: 'Moradia',
+                    controller: _controllers['moradia']!,
+                    opcoes: const ['Própria', 'Alugada'],
+                    obrigatorio: true,
+                  ),
+                  CustomDropdown(
+                    label: 'Danos na Residência',
+                    controller: _controllers['danoResidencia']!,
+                    opcoes: const ['Danos Parcial', 'Dano Total', 'Sem Dano'],
+                    obrigatorio: true,
+                  ),
+                  _campoMonetario(
+                    'estimativaDanoMoveis',
+                    label: 'Estimativa de Dano em Móveis',
+                  ),
+                  _campoMonetario(
+                    'estimativaDanoEdificacao',
+                    label: 'Estimativa de Dano na Edificação',
+                  ),
+                  CustomDropdown(
+                    label: 'Ocupação',
+                    controller: _controllers['ocupacao']!,
+                    opcoes: const ['Regular', 'Irregular'],
+                  ),
+                  CustomDropdown(
+                    label: 'Tipo de Construção',
+                    controller: _controllers['tipoConstrucao']!,
+                    opcoes: const ['Alvenaria', 'Madeira', 'Mista'],
+                  ),
+                  CustomDropdown(
+                    label: 'Alternativa de Moradia',
+                    controller: _controllers['alternativaMoradia']!,
+                    opcoes: const [
+                      'Não Possui',
+                      'Possui Outra Casa',
+                      'Casa de Parentes/Amigos',
+                      'Abrigo Temporário',
+                      'Outros'
+                    ],
+                  ),
+                  _campo('observacaoImovel', label: 'Observações'),
+                ],
+              ),
+              AppFormSection(
+                title: 'Pessoas na Residência',
+                children: [
+                  _campo(
+                    'numeroTotalPessoas',
+                    label: 'Número Total de Pessoas',
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                  _campo(
+                    'menores0a12',
+                    label: 'Menores 0 a 12',
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                  _campo(
+                    'menores13a17',
+                    label: 'Menores 13 a 17',
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                  _campo(
+                    'maiores18a59',
+                    label: 'Maiores 18 a 59',
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                  _campo(
+                    'idosos60mais',
+                    label: 'Idosos 60+',
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                  CustomDropdown(
+                    label: 'Necessidades Especiais',
+                    controller: _controllers['possuiNecessidadesEspeciais']!,
+                    opcoes: const ['Sim', 'Não'],
+                    onChanged: (value) {
+                      final possui = (value ?? '').toLowerCase() == 'sim';
+                      _updatePossui(
+                        'necessidades',
+                        possui,
+                        quantidadeController: _controllers['quantidadeNecessidadesEspeciais'],
+                      );
+                    },
+                  ),
+                  if (_possuiNecessidadesEspeciais)
+                    _campo(
+                      'quantidadeNecessidadesEspeciais',
+                      label: 'Quantidade',
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    ),
+                  _campo('observacaoNecessidades', label: 'Observações'),
+                  CustomDropdown(
+                    label: 'Uso de Medicamento Contínuo',
+                    controller: _controllers['usoMedicamentoContinuo']!,
+                    opcoes: const ['Sim', 'Não'],
+                    obrigatorio: true,
+                  ),
+                  CustomDropdown(
+                    label: 'Possui Desaparecidos?',
+                    controller: _controllers['possuiDesaparecidos']!,
+                    opcoes: const ['Sim', 'Não'],
+                    onChanged: (value) {
+                      final possui = (value ?? '').toLowerCase() == 'sim';
+                      _updatePossui(
+                        'desaparecidos',
+                        possui,
+                        quantidadeController: _controllers['quantidadeDesaparecidos'],
+                      );
+                    },
+                  ),
+                  if (_possuiDesaparecidos)
+                    _campo(
+                      'quantidadeDesaparecidos',
+                      label: 'Quantidade Desaparecidos',
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    ),
+                  CustomDropdown(
+                    label: 'Possui Feridos?',
+                    controller: _controllers['possuiFeridos']!,
+                    opcoes: const ['Sim', 'Não'],
+                    onChanged: (value) {
+                      final possui = (value ?? '').toLowerCase() == 'sim';
+                      _updatePossui(
+                        'feridos',
+                        possui,
+                        quantidadeController: _controllers['quantidadeFeridos'],
+                      );
+                    },
+                  ),
+                  if (_possuiFeridos)
+                    _campo(
+                      'quantidadeFeridos',
+                      label: 'Quantidade Feridos',
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    ),
+                  _campo(
+                    'quantidadeObitos',
+                    label: 'Quantidade Óbitos',
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                ],
+              ),
+              AppFormSection(
+                title: 'Assistência Humanitária - Necessidades Imediatas',
+                children: [
+                  CustomItemQuantidade(
+                    label: 'Água Potável 5L',
+                    controllerMarcado: _controllers['qtdAguaPotavel5L']!,
+                    controllerQuantidade: _controllers['qtdAguaPotavel5LQtd']!,
+                  ),
+                  CustomItemQuantidade(
+                    label: 'Colchões Solteiro',
+                    controllerMarcado: _controllers['qtdColchoesSolteiro']!,
+                    controllerQuantidade: _controllers['qtdColchoesSolteiroQtd']!,
+                  ),
+                  CustomItemQuantidade(
+                    label: 'Colchões Casal',
+                    controllerMarcado: _controllers['qtdColchoesCasal']!,
+                    controllerQuantidade: _controllers['qtdColchoesCasalQtd']!,
+                  ),
+                  CustomItemQuantidade(
+                    label: 'Cesta Básica',
+                    controllerMarcado: _controllers['qtdCestasBasicas']!,
+                    controllerQuantidade: _controllers['qtdCestasBasicasQtd']!,
+                  ),
+                  CustomItemQuantidade(
+                    label: 'Kit Higiene Pessoal',
+                    controllerMarcado: _controllers['qtdKitHigienePessoal']!,
+                    controllerQuantidade: _controllers['qtdKitHigienePessoalQtd']!,
+                  ),
+                  CustomItemQuantidade(
+                    label: 'Kit Limpeza',
+                    controllerMarcado: _controllers['qtdKitLimpeza']!,
+                    controllerQuantidade: _controllers['qtdKitLimpezaQtd']!,
+                  ),
+                  CustomItemQuantidade(
+                    label: 'Móveis',
+                    controllerMarcado: _controllers['qtdMoveis']!,
+                    controllerQuantidade: _controllers['qtdMoveisQtd']!,
+                  ),
+                  CustomItemQuantidade(
+                    label: 'Roupas',
+                    controllerMarcado: _controllers['qtdRoupas']!,
+                    controllerQuantidade: _controllers['qtdRoupasQtd']!,
+                  ),
+                  CustomItemQuantidade(
+                    label: 'Telhas 6mm',
+                    controllerMarcado: _controllers['qtdTelhas6mm']!,
+                    controllerQuantidade: _controllers['qtdTelhas6mmQtd']!,
+                  ),
+                  CustomItemQuantidade(
+                    label: 'Telhas 4mm',
+                    controllerMarcado: _controllers['qtdTelhas4mm']!,
+                    controllerQuantidade: _controllers['qtdTelhas4mmQtd']!,
+                  ),
+                  _campo('outrasNecessidades', label: 'Outros Itens'),
+                  _campo('observacaoAssistencia', label: 'Observações'),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Fotos da residência',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  _previewFotoResidencia(),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
 
@@ -773,20 +973,12 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
   }
 
   Widget _campoMonetario(String key, {required String label}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: TextFormField(
-        controller: _controllers[key],
-        keyboardType: TextInputType.number,
-        inputFormatters: [_currencyInputFormatter],
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: 'R\$ 0,00',
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      ),
+    return AppTextFormField(
+      controller: _controllers[key]!,
+      label: label,
+      keyboardType: TextInputType.number,
+      inputFormatters: [_currencyInputFormatter],
+      hintText: 'R\$ 0,00',
     );
   }
 
