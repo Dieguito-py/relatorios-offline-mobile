@@ -15,6 +15,16 @@ class _HomePageState extends State<HomePage> {
   int _enviadosCount = 0;
   bool _isRefreshing = false;
 
+  String _resolveDisplayName(Map<String, dynamic>? auth) {
+    final nome = (auth?['nome'] as String?)?.trim();
+    if (nome != null && nome.isNotEmpty) return nome;
+
+    final username = (auth?['username'] as String?)?.trim();
+    if (username != null && username.isNotEmpty) return username;
+
+    return 'Usuário';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -32,7 +42,7 @@ class _HomePageState extends State<HomePage> {
 
     if (mounted) {
       setState(() {
-        _username = auth?['nome'] ?? auth?['username'] ?? 'Usuário';
+        _username = _resolveDisplayName(auth);
         _pendentesCount = pendentes.length;
         _enviadosCount = enviados.length;
       });

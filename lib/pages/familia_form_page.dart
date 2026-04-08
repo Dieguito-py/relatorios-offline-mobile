@@ -216,7 +216,7 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
     }
 
     final cpfDigits = (_controllers['cpfAtingido']?.text ?? '').replaceAll(RegExp(r'\D'), '');
-    if (cpfDigits.length != 11) {
+    if (cpfDigits.isNotEmpty && cpfDigits.length != 11) {
       _mostrarMensagemTopo('CPF inválido. Informe os 11 dígitos.');
       return false;
     }

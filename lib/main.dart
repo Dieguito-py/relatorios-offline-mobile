@@ -67,10 +67,11 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future.delayed(const Duration(milliseconds: 500));
 
     final auth = await AppDatabase.instance.obterToken();
+    final token = (auth?['token'] as String?)?.trim();
 
     if (!mounted) return;
 
-    if (auth != null && auth['token'] != null) {
+    if (token != null && token.isNotEmpty) {
       Navigator.pushReplacementNamed(context, '/home');
     } else {
       Navigator.pushReplacementNamed(context, '/login');

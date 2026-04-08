@@ -208,7 +208,10 @@ class SyncService {
     if (_isSyncing) return;
     _isSyncing = true;
     try {
-      final pendentes = await AppDatabase.instance.obterFormularios(sincronizado: false);
+      final pendentes = await AppDatabase.instance.obterFormularios(
+        sincronizado: false,
+        incluirDadosJson: true,
+      );
       for (final form in pendentes) {
         final id = form['id'] as int;
         await trySyncAndMark(id, form);

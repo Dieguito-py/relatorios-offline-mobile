@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 
 class ApiService {
   //static const String _baseUrl = 'https://relatoriosoffline.app/api';
-  static const String _baseUrl = 'http://192.168.1.136:8084/api';
+  static const String _baseUrl = 'http://192.168.0.102:8084/api';
   static String customBaseUrl = '';
   static bool allowSelfSignedCert = !kReleaseMode;
 
@@ -25,6 +25,12 @@ class ApiService {
       httpClient.badCertificateCallback = (cert, host, port) => host == expectedHost;
     }
     return IOClient(httpClient);
+  }
+
+  String? _asNonEmptyString(dynamic value) {
+    if (value is! String) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
   }
 
   Future<Map<String, dynamic>?> login(String username, String password) async {
@@ -46,8 +52,21 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final token = data['token'] ?? data['access_token'];
-        final nome = data['nome'] ?? data['name'];
+        final user = data is Map<String, dynamic> && data['user'] is Map<String, dynamic>
+            ? data['user'] as Map<String, dynamic>
+            : null;
+
+        final token = _asNonEmptyString(data['token']) ??
+            _asNonEmptyString(data['access_token']) ??
+            _asNonEmptyString(user?['token']);
+        final nome = _asNonEmptyString(data['nome']) ??
+            _asNonEmptyString(data['name']) ??
+            _asNonEmptyString(user?['nome']) ??
+            _asNonEmptyString(user?['name']);
+
+        if (token == null) {
+          return null;
+        }
 
         return {
           'token': token,

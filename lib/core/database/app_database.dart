@@ -18,11 +18,20 @@ class AppDatabase {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    return await openDatabase(
+    final db = await openDatabase(
       path,
       version: 2,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
+    );
+
+    await _runMaintenance(db);
+    return db;
+  }
+
+  Future<void> _runMaintenance(Database db) async {
+    await db.execute(
+      "UPDATE formularios SET dados_json = '{\"sincronizado\":true}' WHERE sincronizado = 1",
     );
   }
 
@@ -132,11 +141,17 @@ class AppDatabase {
 
   Future<List<Map<String, dynamic>>> obterFormularios({
     bool? sincronizado,
+    bool incluirDadosJson = false,
   }) async {
     final db = await database;
+    final columns = incluirDadosJson
+        ? null
+        : <String>['id', 'tipo', 'sincronizado', 'data_criacao'];
+
     if (sincronizado != null) {
       return await db.query(
         'formularios',
+        columns: columns,
         where: 'sincronizado = ?',
         whereArgs: [sincronizado ? 1 : 0],
         orderBy: 'data_criacao DESC',
@@ -144,6 +159,7 @@ class AppDatabase {
     }
     return await db.query(
       'formularios',
+      columns: columns,
       orderBy: 'data_criacao DESC',
     );
   }
@@ -152,7 +168,11 @@ class AppDatabase {
     final db = await database;
     await db.update(
       'formularios',
-      {'sincronizado': 1},
+      {
+        'sincronizado': 1,
+        // Keep only a compact marker after successful sync.
+        'dados_json': '{"sincronizado":true}',
+      },
       where: 'id = ?',
       whereArgs: [id],
     );

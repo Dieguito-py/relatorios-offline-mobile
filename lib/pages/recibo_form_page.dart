@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+
+import 'package:relatoriooffline/core/database/app_database.dart';
+import 'package:relatoriooffline/services/sync_service.dart';
 
 class ReciboFormPage extends StatefulWidget {
   const ReciboFormPage({super.key});
@@ -9,12 +13,56 @@ class ReciboFormPage extends StatefulWidget {
 
 class _ReciboFormPageState extends State<ReciboFormPage> {
   final _formKey = GlobalKey<FormState>();
+  bool _isSaving = false;
 
-  void _salvarFormulario() {
+  Future<void> _salvarFormulario() async {
+    if (_isSaving) return;
     if (_formKey.currentState?.validate() ?? false) {
+      setState(() => _isSaving = true);
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Salvando recibo...')),
       );
+
+      final payload = {
+        'tipo': 'recibo',
+        'criadoEm': DateTime.now().toIso8601String(),
+      };
+
+      try {
+        final id = await AppDatabase.instance.salvarFormulario(
+          tipo: 'recibo',
+          dadosJson: jsonEncode(payload),
+        );
+        final enviado = await SyncService.instance.trySendRelatorio(payload, localId: id);
+
+        if (enviado) {
+          await AppDatabase.instance.marcarComoSincronizado(id);
+        }
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              enviado
+                  ? 'Recibo sincronizado com sucesso.'
+                  : 'Recibo salvo como pendente para sincronizar.',
+            ),
+          ),
+        );
+        Navigator.pop(context, true);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao salvar recibo: $e')),
+        );
+      } finally {
+        if (mounted) {
+          setState(() => _isSaving = false);
+        } else {
+          _isSaving = false;
+        }
+      }
     }
   }
 
@@ -27,8 +75,17 @@ class _ReciboFormPageState extends State<ReciboFormPage> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: _salvarFormulario,
+            icon: _isSaving
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.save),
+            onPressed: _isSaving ? null : _salvarFormulario,
             tooltip: 'Salvar',
           ),
         ],
@@ -54,10 +111,19 @@ class _ReciboFormPageState extends State<ReciboFormPage> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _salvarFormulario,
-        backgroundColor: Colors.orange.shade700,
-        icon: const Icon(Icons.save),
-        label: const Text('Salvar'),
+        onPressed: _isSaving ? null : _salvarFormulario,
+        backgroundColor: _isSaving ? Colors.grey : Colors.orange.shade700,
+        icon: _isSaving
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.save),
+        label: Text(_isSaving ? 'Salvando...' : 'Salvar'),
       ),
     );
   }
