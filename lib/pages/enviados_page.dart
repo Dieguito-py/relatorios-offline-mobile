@@ -33,28 +33,6 @@ class _EnviadosPageState extends State<EnviadosPage> {
     }
   }
 
-  String _getTipoLabel(String tipo) {
-    switch (tipo) {
-      case 'familia':
-        return 'Família';
-      case 'recibo':
-        return 'Recibo';
-      default:
-        return tipo;
-    }
-  }
-
-  IconData _getTipoIcon(String tipo) {
-    switch (tipo) {
-      case 'familia':
-        return Icons.family_restroom;
-      case 'recibo':
-        return Icons.receipt_long;
-      default:
-        return Icons.description;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -94,7 +72,7 @@ class _EnviadosPageState extends State<EnviadosPage> {
                     itemCount: _formularios.length,
                     itemBuilder: (context, index) {
                       final form = _formularios[index];
-                      final tipo = form['tipo'] as String;
+                      final nomeTemplate = form['tipo'] as String;
                       final dataCriacao = DateTime.parse(
                         form['data_criacao'] as String,
                       );
@@ -118,13 +96,13 @@ class _EnviadosPageState extends State<EnviadosPage> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
-                              _getTipoIcon(tipo),
+                              Icons.assignment_turned_in,
                               color: Colors.green.shade700,
                               size: 28,
                             ),
                           ),
                           title: Text(
-                            _getTipoLabel(tipo),
+                            nomeTemplate,
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
@@ -169,7 +147,6 @@ class _EnviadosPageState extends State<EnviadosPage> {
                               ),
                             ],
                           ),
-                          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                         ),
                       );
                     },

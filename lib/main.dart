@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:relatoriooffline/pages/login_page.dart';
 import 'package:relatoriooffline/pages/home_page.dart';
 import 'package:relatoriooffline/pages/menu_formulario_page.dart';
-import 'package:relatoriooffline/pages/familia_form_page.dart';
-import 'package:relatoriooffline/pages/recibo_form_page.dart';
 import 'package:relatoriooffline/pages/pendentes_page.dart';
 import 'package:relatoriooffline/pages/enviados_page.dart';
 import 'package:relatoriooffline/core/database/app_database.dart';
@@ -40,8 +38,6 @@ class MyApp extends StatelessWidget {
         '/login': (context) => const LoginPage(),
         '/home': (context) => const HomePage(),
         '/menu_formularios': (context) => const MenuFormularioPage(),
-        '/familia_form': (context) => const FamiliaFormPage(),
-        '/recibo_form': (context) => const ReciboFormPage(),
         '/pendentes': (context) => const PendentesPage(),
         '/enviados': (context) => const EnviadosPage(),
       },

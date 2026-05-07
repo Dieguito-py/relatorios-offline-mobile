@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 class AppFormSection extends StatelessWidget {
   const AppFormSection({
@@ -42,6 +45,28 @@ class AppFormSection extends StatelessWidget {
   }
 }
 
+class FieldLabel extends StatelessWidget {
+  final String label;
+  final bool obrigatorio;
+
+  const FieldLabel({super.key, required this.label, this.obrigatorio = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6, left: 4),
+      child: Text(
+        label + (obrigatorio ? ' *' : ''),
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF3A3F7A),
+        ),
+      ),
+    );
+  }
+}
+
 class AppTextFormField extends StatelessWidget {
   const AppTextFormField({
     super.key,
@@ -73,38 +98,154 @@ class AppTextFormField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: TextFormField(
-        controller: controller,
-        keyboardType: keyboardType,
-        inputFormatters: inputFormatters,
-        textCapitalization: textCapitalization,
-        readOnly: readOnly,
-        onTap: onTap,
-        decoration: InputDecoration(
-          labelText: obrigatorio ? '$label *' : label,
-          hintText: hintText,
-          suffixIcon: suffixIcon,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          FieldLabel(label: label, obrigatorio: obrigatorio),
+          TextFormField(
+            controller: controller,
+            keyboardType: keyboardType,
+            inputFormatters: inputFormatters,
+            textCapitalization: textCapitalization,
+            readOnly: readOnly,
+            onTap: onTap,
+            decoration: InputDecoration(
+              hintText: hintText,
+              suffixIcon: suffixIcon,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFF3A3F7A), width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+            validator: validator ??
+                (obrigatorio
+                    ? (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Campo obrigatório';
+                        }
+                        return null;
+                      }
+                    : null),
           ),
-          filled: true,
-          fillColor: Theme.of(context)
-              .colorScheme
-              .surfaceContainerHighest
-              .withValues(alpha: 0.25),
-        ),
-        validator: validator ??
-            (obrigatorio
-                ? (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Campo obrigatório';
-                    }
-                    return null;
-                  }
-                : null),
+        ],
       ),
     );
+  }
+}
+
+class AppImagePickerButtons extends StatelessWidget {
+  final VoidCallback onCamera;
+  final VoidCallback onGallery;
+  final String label;
+  final bool obrigatorio;
+
+  const AppImagePickerButtons({
+    super.key,
+    required this.onCamera,
+    required this.onGallery,
+    this.label = "Adicionar Foto",
+    this.obrigatorio = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (label.isNotEmpty)
+          FieldLabel(label: label, obrigatorio: obrigatorio),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: onCamera,
+                icon: const Icon(Icons.camera_alt),
+                label: const Text("Câmera"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF3A3F7A),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: onGallery,
+                icon: const Icon(Icons.photo_library),
+                label: const Text("Galeria"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.grey.shade200,
+                  foregroundColor: Colors.grey.shade800,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class ImageHelper {
+  static const int maxSizeBytes = 10 * 1024 * 1024; // 10MB
+
+  static Future<Uint8List?> pickAndCompress(ImageSource source) async {
+    final ImagePicker picker = ImagePicker();
+    
+    // maxWidth de 1920 (Full HD) e qualidade 80 geralmente resultam em arquivos de 1MB a 2MB
+    final XFile? file = await picker.pickImage(
+      source: source,
+      maxWidth: 1920,
+      maxHeight: 1920,
+      imageQuality: 80,
+    );
+
+    if (file == null) return null;
+
+    final bytes = await file.readAsBytes();
+    
+    if (bytes.lengthInBytes > maxSizeBytes) {
+      // Se ainda for maior que 10MB (raríssimo com as configs acima), avisar ou comprimir mais
+      return null; 
+    }
+
+    return bytes;
+  }
+
+  static Future<List<Uint8List>> pickMultiAndCompress() async {
+    final ImagePicker picker = ImagePicker();
+    final List<XFile> files = await picker.pickMultiImage(
+      maxWidth: 1920,
+      maxHeight: 1920,
+      imageQuality: 80,
+    );
+
+    List<Uint8List> result = [];
+    for (var file in files) {
+      final bytes = await file.readAsBytes();
+      if (bytes.lengthInBytes <= maxSizeBytes) {
+        result.add(bytes);
+      }
+    }
+    return result;
   }
 }
 

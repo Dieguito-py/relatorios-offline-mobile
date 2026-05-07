@@ -42,6 +42,8 @@ class _LoginPageState extends State<LoginPage> {
           _usernameController.text.trim(),
           result['token'],
           nome: result['nome'],
+          municipalId: result['municipalId'],
+          municipalNome: result['municipalNome'],
         );
 
         if (!mounted) return;

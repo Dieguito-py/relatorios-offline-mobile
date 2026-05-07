@@ -464,17 +464,18 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
     );
   }
 
-  Future<void> _selecionarFotoResidencia() async {
-    final List<XFile> imagens = await _picker.pickMultiImage(
-      imageQuality: 70,
-      maxWidth: 1600,
-    );
-    if (imagens.isEmpty) return;
-
-    final novasFotos = await Future.wait(imagens.map((imagem) => imagem.readAsBytes()));
-    setState(() {
-      _fotosResidencia.addAll(novasFotos);
-    });
+  Future<void> _selecionarFotoResidencia(ImageSource source) async {
+    if (source == ImageSource.camera) {
+      final bytes = await ImageHelper.pickAndCompress(ImageSource.camera);
+      if (bytes != null) {
+        setState(() => _fotosResidencia.add(bytes));
+      }
+    } else {
+      final novasFotos = await ImageHelper.pickMultiAndCompress();
+      if (novasFotos.isNotEmpty) {
+        setState(() => _fotosResidencia.addAll(novasFotos));
+      }
+    }
   }
 
   void _abrirPreviewFoto(int index) {
@@ -511,91 +512,67 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
   }
 
   Widget _previewFotoResidencia() {
-    if (_fotosResidencia.isEmpty) {
-      return OutlinedButton.icon(
-        onPressed: _selecionarFotoResidencia,
-        icon: const Icon(Icons.photo_library),
-        label: const Text('Selecionar fotos da residência'),
-      );
-    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '${_fotosResidencia.length} imagem(ns) selecionada(s)',
-          style: Theme.of(context).textTheme.bodyMedium,
+        AppImagePickerButtons(
+          onCamera: () => _selecionarFotoResidencia(ImageSource.camera),
+          onGallery: () => _selecionarFotoResidencia(ImageSource.gallery),
         ),
-        const SizedBox(height: 4),
-        Text(
-          'Toque na miniatura para ampliar',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 120,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: _fotosResidencia.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (context, index) {
-              return Stack(
-                children: [
-                  GestureDetector(
-                    onTap: () => _abrirPreviewFoto(index),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.memory(
-                        _fotosResidencia[index],
-                        width: 120,
-                        height: 120,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  const Positioned(
-                    left: 6,
-                    bottom: 6,
-                    child: Icon(
-                      Icons.zoom_in,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: InkWell(
-                      onTap: () => setState(() => _fotosResidencia.removeAt(index)),
-                      child: Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: const Icon(Icons.close, size: 16, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
+        if (_fotosResidencia.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text(
+            '${_fotosResidencia.length} imagem(ns) selecionada(s)',
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            TextButton.icon(
-              onPressed: _selecionarFotoResidencia,
-              icon: const Icon(Icons.add_photo_alternate_outlined),
-              label: const Text('Adicionar fotos'),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 120,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _fotosResidencia.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                return Stack(
+                  children: [
+                    GestureDetector(
+                      onTap: () => _abrirPreviewFoto(index),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.memory(
+                          _fotosResidencia[index],
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: InkWell(
+                        onTap: () => setState(() => _fotosResidencia.removeAt(index)),
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: const Icon(Icons.close, size: 16, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
-            const SizedBox(width: 12),
-            TextButton.icon(
-              onPressed: () => setState(_fotosResidencia.clear),
-              icon: const Icon(Icons.delete_outline),
-              label: const Text('Remover todas'),
-            ),
-          ],
-        ),
+          ),
+          TextButton.icon(
+            onPressed: () => setState(_fotosResidencia.clear),
+            icon: const Icon(Icons.delete_outline, color: Colors.red),
+            label: const Text('Remover todas', style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ],
     );
   }
@@ -633,9 +610,24 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       return false;
     }
 
-    final posicao = await Geolocator.getCurrentPosition();
+    Position? posicao;
+    try {
+      posicao = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 30),
+        ),
+      );
+    } catch (e) {
+      posicao = await Geolocator.getLastKnownPosition();
+      if (posicao == null) return false;
+    }
+
     _latitude = posicao.latitude;
     _longitude = posicao.longitude;
+    if (_controllers.containsKey('localizacao')) {
+      _controllers['localizacao']!.text = "${_latitude},${_longitude}";
+    }
     return true;
   }
 

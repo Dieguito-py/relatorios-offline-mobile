@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:relatoriooffline/core/database/app_database.dart';
 import 'package:relatoriooffline/services/sync_service.dart';
@@ -14,6 +15,7 @@ class _HomePageState extends State<HomePage> {
   int _pendentesCount = 0;
   int _enviadosCount = 0;
   bool _isRefreshing = false;
+  Timer? _refreshTimer;
 
   String _resolveDisplayName(Map<String, dynamic>? auth) {
     final nome = (auth?['nome'] as String?)?.trim();
@@ -29,6 +31,22 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _carregarDados();
+    _startAutoRefresh();
+  }
+
+  void _startAutoRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted && !_isRefreshing) {
+        _carregarDados();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _carregarDados() async {
@@ -227,7 +245,7 @@ class _HomePageState extends State<HomePage> {
               icon: Icons.description,
               title: 'Formulários',
               subtitle: 'Criar novo formulário',
-              color: Color(0xFF3A3F7A),
+              color: const Color(0xFF3A3F7A),
               onTap: () {
                 Navigator.pushNamed(context, '/menu_formularios')
                     .then((_) => _carregarDados());

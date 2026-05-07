@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 
 class ApiService {
   //static const String _baseUrl = 'https://relatoriosoffline.app/api';
-  static const String _baseUrl = 'http://192.168.0.102:8084/api';
+  static const String _baseUrl = 'http://192.168.0.101:8084/api';
   static String customBaseUrl = '';
   static bool allowSelfSignedCert = !kReleaseMode;
 
@@ -25,6 +25,28 @@ class ApiService {
       httpClient.badCertificateCallback = (cert, host, port) => host == expectedHost;
     }
     return IOClient(httpClient);
+  }
+
+  Future<List<dynamic>?> getTemplates(String token) async {
+    try {
+      final apiUrl = getBaseUrl();
+      final client = _createClient();
+      final response = await client.get(
+        Uri.parse('$apiUrl/templates'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 15));
+      client.close();
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
   }
 
   String? _asNonEmptyString(dynamic value) {
@@ -52,17 +74,30 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final user = data is Map<String, dynamic> && data['user'] is Map<String, dynamic>
-            ? data['user'] as Map<String, dynamic>
-            : null;
-
+        
         final token = _asNonEmptyString(data['token']) ??
             _asNonEmptyString(data['access_token']) ??
-            _asNonEmptyString(user?['token']);
+            _asNonEmptyString(data['accessToken']) ??
+            (data['user'] is Map ? _asNonEmptyString(data['user']['token']) : null);
+        
         final nome = _asNonEmptyString(data['nome']) ??
             _asNonEmptyString(data['name']) ??
-            _asNonEmptyString(user?['nome']) ??
-            _asNonEmptyString(user?['name']);
+            _asNonEmptyString(data['username']) ??
+            (data['user'] is Map ? (_asNonEmptyString(data['user']['nome']) ?? _asNonEmptyString(data['user']['name'])) : null);
+
+        var municipalId = data['municipalId'] ??
+                         data['municipal_id'] ?? 
+                         (data['user'] is Map ? (data['user']['municipalId'] ?? data['user']['municipal_id']) : null);
+                           
+        final municipalNome = _asNonEmptyString(data['municipalNome']) ??
+                             _asNonEmptyString(data['municipal_nome']) ??
+                             _asNonEmptyString(data['cidade']) ??
+                             _asNonEmptyString(data['municipio']) ??
+                             (data['user'] is Map ? (
+                               _asNonEmptyString(data['user']['municipalNome']) ?? 
+                               _asNonEmptyString(data['user']['municipal_nome']) ?? 
+                               _asNonEmptyString(data['user']['cidade'])
+                             ) : null);
 
         if (token == null) {
           return null;
@@ -71,6 +106,8 @@ class ApiService {
         return {
           'token': token,
           'nome': nome,
+          'municipalId': municipalId is String ? int.tryParse(municipalId) : municipalId,
+          'municipalNome': municipalNome,
         };
       }
 

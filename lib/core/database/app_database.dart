@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
@@ -20,7 +22,7 @@ class AppDatabase {
 
     final db = await openDatabase(
       path,
-      version: 2,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -40,19 +42,33 @@ class AppDatabase {
       try {
         final result = await db.rawQuery('PRAGMA table_info(auth)');
         final columnExists = result.any((column) => column['name'] == 'nome');
-
         if (!columnExists) {
           await db.execute('ALTER TABLE auth ADD COLUMN nome TEXT');
         }
-      } catch (e) {
-        try {
-          await db.execute('ALTER TABLE auth ADD COLUMN nome TEXT');
-        } catch (e2) {
-          if (!e2.toString().contains('duplicate column')) {
-            rethrow;
-          }
-        }
+      } catch (_) {}
+    }
+    if (oldVersion < 4) {
+      final authInfo = await db.rawQuery('PRAGMA table_info(auth)');
+      if (!authInfo.any((c) => c['name'] == 'municipal_id')) {
+        await db.execute('ALTER TABLE auth ADD COLUMN municipal_id INTEGER');
       }
+      if (!authInfo.any((c) => c['name'] == 'municipal_nome')) {
+        await db.execute('ALTER TABLE auth ADD COLUMN municipal_nome TEXT');
+      }
+
+      final formInfo = await db.rawQuery('PRAGMA table_info(formularios)');
+      if (!formInfo.any((c) => c['name'] == 'template_id')) {
+        await db.execute('ALTER TABLE formularios ADD COLUMN template_id INTEGER');
+      }
+      
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS templates (
+          id INTEGER PRIMARY KEY,
+          nome TEXT NOT NULL,
+          descricao TEXT,
+          dados_json TEXT NOT NULL
+        )
+      ''');
     }
   }
 
@@ -63,53 +79,72 @@ class AppDatabase {
         username TEXT NOT NULL,
         token TEXT NOT NULL,
         nome TEXT,
+        municipal_id INTEGER,
+        municipal_nome TEXT,
         data_login TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE templates (
+        id INTEGER PRIMARY KEY,
+        nome TEXT NOT NULL,
+        descricao TEXT,
+        dados_json TEXT NOT NULL
       )
     ''');
 
     await db.execute('''
       CREATE TABLE formularios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        template_id INTEGER,
         tipo TEXT NOT NULL,
         dados_json TEXT NOT NULL,
         sincronizado INTEGER NOT NULL DEFAULT 0,
-        data_criacao TEXT NOT NULL
+        data_criacao TEXT NOT NULL,
+        FOREIGN KEY (template_id) REFERENCES templates (id)
       )
     ''');
   }
 
-  Future<void> salvarToken(String username, String token, {String? nome}) async {
+  Future<void> salvarTemplates(List<dynamic> templates) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('templates');
+      for (var template in templates) {
+        await txn.insert('templates', {
+          'id': template['id'],
+          'nome': template['nome'],
+          'descricao': template['descricao'],
+          'dados_json': jsonEncode(template),
+        });
+      }
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> obterTemplates() async {
+    final db = await database;
+    return await db.query('templates');
+  }
+
+  Future<void> salvarToken(
+    String username,
+    String token, {
+    String? nome,
+    int? municipalId,
+    String? municipalNome,
+  }) async {
     final db = await database;
     await db.delete('auth');
 
-    try {
-      await db.insert('auth', {
-        'username': username,
-        'token': token,
-        'nome': nome,
-        'data_login': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      if (e.toString().contains('no column named nome')) {
-        // Verificar se a coluna já existe antes de tentar adicionar
-        final result = await db.rawQuery('PRAGMA table_info(auth)');
-        final columnExists = result.any((column) => column['name'] == 'nome');
-
-        if (!columnExists) {
-          await db.execute('ALTER TABLE auth ADD COLUMN nome TEXT');
-        }
-
-        // Tentar inserir novamente
-        await db.insert('auth', {
-          'username': username,
-          'token': token,
-          'nome': nome,
-          'data_login': DateTime.now().toIso8601String(),
-        });
-      } else {
-        rethrow;
-      }
-    }
+    await db.insert('auth', {
+      'username': username,
+      'token': token,
+      'nome': nome,
+      'municipal_id': municipalId,
+      'municipal_nome': municipalNome,
+      'data_login': DateTime.now().toIso8601String(),
+    });
   }
 
   Future<Map<String, dynamic>?> obterToken() async {
@@ -129,10 +164,12 @@ class AppDatabase {
   Future<int> salvarFormulario({
     required String tipo,
     required String dadosJson,
+    int? templateId,
   }) async {
     final db = await database;
     return await db.insert('formularios', {
       'tipo': tipo,
+      'template_id': templateId,
       'dados_json': dadosJson,
       'sincronizado': 0,
       'data_criacao': DateTime.now().toIso8601String(),
@@ -146,7 +183,7 @@ class AppDatabase {
     final db = await database;
     final columns = incluirDadosJson
         ? null
-        : <String>['id', 'tipo', 'sincronizado', 'data_criacao'];
+        : <String>['id', 'tipo', 'template_id', 'sincronizado', 'data_criacao'];
 
     if (sincronizado != null) {
       return await db.query(
@@ -170,7 +207,6 @@ class AppDatabase {
       'formularios',
       {
         'sincronizado': 1,
-        // Keep only a compact marker after successful sync.
         'dados_json': '{"sincronizado":true}',
       },
       where: 'id = ?',

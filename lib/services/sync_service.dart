@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
@@ -18,10 +17,8 @@ class SyncService {
   bool _isSyncing = false;
   final Set<int> _inFlightIds = <int>{};
 
-  static const int _maxRetries = 3;
-  static const Duration _initialRetryDelay = Duration(seconds: 2);
   static const Duration _connectionStabilizationDelay = Duration(seconds: 3);
-  static const Duration _requestTimeout = Duration(seconds: 30);
+  static const Duration _requestTimeout = Duration(seconds: 60);
 
   bool _hasConnection(dynamic status) {
     if (status is ConnectivityResult) {
@@ -55,153 +52,73 @@ class SyncService {
     }
   }
 
-  Future<void> dispose() async {
-    await _connectivitySubscription?.cancel();
-    _connectivitySubscription = null;
-    _monitoringStarted = false;
-  }
-
   Future<Map<String, dynamic>?> _getAuth() async {
     return await AppDatabase.instance.obterToken();
   }
 
   Future<bool> trySendRelatorio(
-    Map<String, dynamic> relatorioJson, {
+    Map<String, dynamic> dadosBrutos, {
     int? localId,
+    int? templateId,
   }) async {
     if (localId != null) {
-      if (_inFlightIds.contains(localId)) {
-        return false;
-      }
+      if (_inFlightIds.contains(localId)) return false;
       _inFlightIds.add(localId);
     }
 
-    final auth = await _getAuth();
-    final token = auth?['token'] as String?;
-
-    if (token == null || token.isEmpty) {
-      if (localId != null) _inFlightIds.remove(localId);
-      return false;
-    }
-
-    final base = ApiService.getBaseUrl();
-    final uri = Uri.parse('$base/relatorios/criar');
-    final imagens = _extrairImagens(relatorioJson);
-    final payloadSemImagens = Map<String, dynamic>.from(relatorioJson)
-      ..remove('fotoResidencia')
-      ..remove('fotosResidencia');
-    final client = http.Client();
-
     try {
-      for (int attempt = 0; attempt < _maxRetries; attempt++) {
-        try {
-          final connectivity = await _connectivity.checkConnectivity();
-          if (!_hasConnection(connectivity)) {
-            break;
-          }
+      final auth = await _getAuth();
+      final token = auth?['token'] as String?;
+      if (token == null || token.isEmpty) return false;
 
-          final request = http.MultipartRequest('POST', uri)
-            ..headers['Authorization'] = 'Bearer $token';
+      final uri = Uri.parse('${ApiService.getBaseUrl()}/relatorios/criar');
+      var request = http.MultipartRequest('POST', uri);
+      
+      request.headers['Authorization'] = 'Bearer $token';
 
-          payloadSemImagens.forEach((key, value) {
-            if (value == null) return;
-            if (value is List || value is Map) {
-              request.fields[key] = jsonEncode(value);
-              return;
+      final Map<String, dynamic> dadosParaJson = Map.from(dadosBrutos);
+      
+      dadosBrutos.forEach((key, value) {
+        if (value is List && value.isNotEmpty) {
+          final first = value.first;
+          if (first is String && first.length > 100) {
+            for (int i = 0; i < value.length; i++) {
+              try {
+                final bytes = base64Decode(value[i] as String);
+                request.files.add(http.MultipartFile.fromBytes(
+                  '$key[]', 
+                  bytes,
+                  filename: '${key}_$i.jpg',
+                ));
+              } catch (e) {
+              }
             }
-            request.fields[key] = value.toString();
-          });
-
-          for (var i = 0; i < imagens.length; i++) {
-            request.files.add(
-              http.MultipartFile.fromBytes(
-                'fotosResidencia',
-                imagens[i],
-                filename: 'residencia_${i + 1}.jpg',
-              ),
-            );
+            dadosParaJson[key] = "[ENVIADO_COMO_ARQUIVO]";
           }
-
-          final streamedResponse = await client.send(request).timeout(_requestTimeout);
-          final response = await http.Response.fromStream(streamedResponse);
-
-          if (response.statusCode >= 200 && response.statusCode < 300) {
-            return true;
-          }
-
-          if (response.statusCode >= 500 && attempt < _maxRetries - 1) {
-            await Future.delayed(_initialRetryDelay * (attempt + 1));
-            continue;
-          }
-
-          return false;
-        } on TimeoutException {
-          if (attempt < _maxRetries - 1) {
-            await Future.delayed(_initialRetryDelay * (attempt + 1));
-            continue;
-          }
-          return false;
-        } on http.ClientException {
-          if (attempt < _maxRetries - 1) {
-            await Future.delayed(_initialRetryDelay * (attempt + 1));
-            continue;
-          }
-          return false;
         }
+      });
+
+      final requestPayload = {
+        "templateId": templateId,
+        "cidade": auth?['municipal_nome'] ?? "Desconhecida",
+        "municipalId": auth?['municipal_id'] ?? 0,
+        "dados": dadosParaJson,
+      };
+      
+      request.fields['request'] = jsonEncode(requestPayload);
+
+      final streamedResponse = await request.send().timeout(_requestTimeout);
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return true;
       }
       return false;
     } catch (e) {
       return false;
     } finally {
-      client.close();
-      if (localId != null) {
-        _inFlightIds.remove(localId);
-      }
+      if (localId != null) _inFlightIds.remove(localId);
     }
-  }
-
-  List<Uint8List> _extrairImagens(Map<String, dynamic> payload) {
-    final imagens = <Uint8List>[];
-
-    final fotosMultiplas = payload['fotosResidencia'];
-    if (fotosMultiplas is List) {
-      for (final item in fotosMultiplas) {
-        if (item is String && item.isNotEmpty) {
-          try {
-            imagens.add(base64Decode(item));
-          } catch (_) {
-            // Ignora imagens inválidas para não bloquear o envio restante.
-          }
-        }
-      }
-    }
-
-    final fotoLegada = payload['fotoResidencia'];
-    if (fotoLegada is String && fotoLegada.isNotEmpty) {
-      try {
-        imagens.add(base64Decode(fotoLegada));
-      } catch (_) {
-        // Ignora base64 inválido legado.
-      }
-    }
-
-    return imagens;
-  }
-
-  Future<bool> trySyncAndMark(int id, Map<String, dynamic> record) async {
-    try {
-      final dadosJson = record['dados_json'] as String;
-      final Map<String, dynamic> payload = jsonDecode(dadosJson);
-
-      final success = await trySendRelatorio(payload, localId: id);
-      if (success) {
-        await AppDatabase.instance.marcarComoSincronizado(id);
-        return true;
-      }
-    } catch (e) {
-      // ignore and return false
-    }
-    return false;
   }
 
   Future<void> syncPending() async {
@@ -214,7 +131,18 @@ class SyncService {
       );
       for (final form in pendentes) {
         final id = form['id'] as int;
-        await trySyncAndMark(id, form);
+        final templateId = form['template_id'] as int?;
+        final dadosBrutos = jsonDecode(form['dados_json'] as String);
+
+        final success = await trySendRelatorio(
+          dadosBrutos,
+          localId: id,
+          templateId: templateId,
+        );
+
+        if (success) {
+          await AppDatabase.instance.marcarComoSincronizado(id);
+        }
       }
     } finally {
       _isSyncing = false;
