@@ -226,4 +226,3 @@ class AppDatabase {
     await databaseFactory.deleteDatabase(path);
   }
 }
-

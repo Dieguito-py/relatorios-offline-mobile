@@ -23,7 +23,6 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
   final _formKey = GlobalKey<FormState>();
   final Map<String, dynamic> _values = {};
   final Map<String, TextEditingController> _controllers = {};
-  final ImagePicker _picker = ImagePicker();
   bool _isSaving = false;
 
   @override
@@ -232,6 +231,13 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
       }
 
       try {
+        final auth = await AppDatabase.instance.obterToken();
+        final municipalIdFromAuth = auth?['municipal_id'];
+        
+        if (!dadosParaSalvar.containsKey('municipalId')) {
+          dadosParaSalvar['municipalId'] = municipalIdFromAuth;
+        }
+
         final idLocal = await AppDatabase.instance.salvarFormulario(
           tipo: widget.template['nome'],
           templateId: widget.template['id'],

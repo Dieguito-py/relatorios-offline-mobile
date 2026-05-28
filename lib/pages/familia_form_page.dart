@@ -89,7 +89,6 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
   double? _latitude;
   double? _longitude;
   final List<Uint8List> _fotosResidencia = <Uint8List>[];
-  final ImagePicker _picker = ImagePicker();
   bool _possuiNecessidadesEspeciais = false;
   bool _possuiDesaparecidos = false;
   bool _possuiFeridos = false;
@@ -295,6 +294,9 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       return null;
     }
 
+    final auth = await AppDatabase.instance.obterToken();
+    final municipalIdFromAuth = auth?['municipal_id'];
+
     final payload = {
       'nomeAtingido': _controllers['nomeAtingido']!.text,
       'cpfAtingido': _controllers['cpfAtingido']!.text,
@@ -345,7 +347,9 @@ class _FamiliaFormPageState extends State<FamiliaFormPage> {
       'qtdRoupas': toInt(_controllers['qtdRoupasQtd']!.text) ?? 0,
       'outrasNecessidades': _controllers['outrasNecessidades']!.text,
       'observacaoAssistencia': _controllers['observacaoAssistencia']!.text,
-      'coordenadoriaMunicipalId': _controllers['coordenadoriaMunicipalId']!.text,
+      'coordenadoriaMunicipalId': _controllers['coordenadoriaMunicipalId']!.text.isEmpty 
+          ? municipalIdFromAuth?.toString() 
+          : _controllers['coordenadoriaMunicipalId']!.text,
       'latitude': _latitude?.toString(),
       'longitude': _longitude?.toString(),
       'fotosResidencia': _fotosResidencia.map(base64Encode).toList(),

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 
 class ApiService {
   //static const String _baseUrl = 'https://relatoriosoffline.app/api';
+  //static const String _baseUrl = 'http://10.112.2.151/api';
   static const String _baseUrl = 'http://192.168.0.101:8084/api';
   static String customBaseUrl = '';
   static bool allowSelfSignedCert = !kReleaseMode;
@@ -87,16 +88,25 @@ class ApiService {
 
         var municipalId = data['municipalId'] ??
                          data['municipal_id'] ?? 
-                         (data['user'] is Map ? (data['user']['municipalId'] ?? data['user']['municipal_id']) : null);
+                         data['cidade_id'] ??
+                         data['municipio_id'] ??
+                         (data['user'] is Map ? (
+                           data['user']['municipalId'] ?? 
+                           data['user']['municipal_id'] ?? 
+                           data['user']['cidade_id'] ??
+                           data['user']['municipio_id']
+                         ) : null);
                            
         final municipalNome = _asNonEmptyString(data['municipalNome']) ??
                              _asNonEmptyString(data['municipal_nome']) ??
                              _asNonEmptyString(data['cidade']) ??
                              _asNonEmptyString(data['municipio']) ??
+                             _asNonEmptyString(data['cidade_nome']) ??
                              (data['user'] is Map ? (
                                _asNonEmptyString(data['user']['municipalNome']) ?? 
                                _asNonEmptyString(data['user']['municipal_nome']) ?? 
-                               _asNonEmptyString(data['user']['cidade'])
+                               _asNonEmptyString(data['user']['cidade']) ??
+                               _asNonEmptyString(data['user']['cidade_nome'])
                              ) : null);
 
         if (token == null) {

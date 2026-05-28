@@ -101,7 +101,7 @@ class SyncService {
       final requestPayload = {
         "templateId": templateId,
         "cidade": auth?['municipal_nome'] ?? "Desconhecida",
-        "municipalId": auth?['municipal_id'] ?? 0,
+        "municipalId": auth?['municipal_id'],
         "dados": dadosParaJson,
       };
       
@@ -113,6 +113,8 @@ class SyncService {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return true;
       }
+      
+      print('Erro ao enviar relatório (${response.statusCode}): ${response.body}');
       return false;
     } catch (e) {
       return false;
