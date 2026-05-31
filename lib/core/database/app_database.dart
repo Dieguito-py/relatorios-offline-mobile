@@ -32,9 +32,7 @@ class AppDatabase {
   }
 
   Future<void> _runMaintenance(Database db) async {
-    await db.execute(
-      "UPDATE formularios SET dados_json = '{\"sincronizado\":true}' WHERE sincronizado = 1",
-    );
+    // Mantém os dados originais para permitir consulta futura
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -176,6 +174,35 @@ class AppDatabase {
     });
   }
 
+  Future<void> atualizarFormulario({
+    required int id,
+    required String dadosJson,
+  }) async {
+    final db = await database;
+    await db.update(
+      'formularios',
+      {
+        'dados_json': dadosJson,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<Map<String, dynamic>?> obterFormularioPorId(int id) async {
+    final db = await database;
+    final result = await db.query(
+      'formularios',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (result.isNotEmpty) {
+      return result.first;
+    }
+    return null;
+  }
+
   Future<List<Map<String, dynamic>>> obterFormularios({
     bool? sincronizado,
     bool incluirDadosJson = false,
@@ -207,10 +234,19 @@ class AppDatabase {
       'formularios',
       {
         'sincronizado': 1,
-        'dados_json': '{"sincronizado":true}',
+        // Mantemos o dados_json original para visualização
       },
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  Future<void> limparEnviados() async {
+    final db = await database;
+    await db.delete(
+      'formularios',
+      where: 'sincronizado = ?',
+      whereArgs: [1],
     );
   }
 

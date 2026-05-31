@@ -18,7 +18,7 @@ class _MenuFormularioPageState extends State<MenuFormularioPage> {
   @override
   void initState() {
     super.initState();
-    _loadTemplates();
+    _loadTemplates().then((_) => _syncTemplates());
   }
 
   Future<void> _loadTemplates() async {
@@ -116,9 +116,49 @@ class _MenuFormularioPageState extends State<MenuFormularioPage> {
             )
           : ListView.builder(
               padding: const EdgeInsets.all(16.0),
-              itemCount: _templates.length,
+              itemCount: _templates.length + 1,
               itemBuilder: (context, index) {
-                final templateRecord = _templates[index];
+                if (index == 0) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 24.0),
+                    child: InkWell(
+                      onTap: _isLoading ? null : _syncTemplates,
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.orange.shade700, width: 2),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (_isLoading)
+                              const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
+                              )
+                            else
+                              Icon(Icons.sync, color: Colors.orange.shade700),
+                            const SizedBox(width: 12),
+                            Text(
+                              _isLoading ? 'Sincronizando...' : 'SINCRONIZAR FORMULÁRIOS',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange.shade700,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                final templateRecord = _templates[index - 1];
                 final templateData = jsonDecode(templateRecord['dados_json']);
 
                 return Padding(

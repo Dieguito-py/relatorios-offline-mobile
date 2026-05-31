@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:relatoriooffline/core/database/app_database.dart';
 import 'package:relatoriooffline/services/sync_service.dart';
+import 'package:relatoriooffline/pages/dynamic_form_page.dart';
+import 'package:relatoriooffline/pages/familia_form_page.dart';
 
 class PendentesPage extends StatefulWidget {
   const PendentesPage({super.key});
@@ -26,6 +29,7 @@ class _PendentesPageState extends State<PendentesPage> {
 
     final formularios = await AppDatabase.instance.obterFormularios(
       sincronizado: false,
+      incluirDadosJson: true,
     );
 
     if (mounted) {
@@ -33,6 +37,42 @@ class _PendentesPageState extends State<PendentesPage> {
         _formularios = formularios;
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _abrirFormulario(Map<String, dynamic> form) async {
+    final tipo = form['tipo'] as String;
+    final idLocal = form['id'] as int;
+    final dadosJson = form['dados_json'] as String;
+    final templateId = form['template_id'] as int?;
+
+    final initialData = jsonDecode(dadosJson) as Map<String, dynamic>;
+
+    Widget? page;
+
+    if (templateId != null) {
+      final templates = await AppDatabase.instance.obterTemplates();
+      final templateRecord = templates.firstWhere((t) => t['id'] == templateId);
+      final templateData = jsonDecode(templateRecord['dados_json']);
+
+      page = DynamicFormPage(
+        template: templateData,
+        initialData: initialData,
+        localId: idLocal,
+      );
+    } else if (tipo == 'familia') {
+      page = FamiliaFormPage(
+        initialData: initialData,
+        localId: idLocal,
+      );
+    }
+
+    if (page != null && mounted) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => page!),
+      );
+      _carregarFormularios();
     }
   }
 
@@ -91,6 +131,7 @@ class _PendentesPageState extends State<PendentesPage> {
                           ),
                         ),
                         child: ListTile(
+                          onTap: () => _abrirFormulario(form),
                           contentPadding: const EdgeInsets.all(16),
                           leading: Container(
                             padding: const EdgeInsets.all(12),

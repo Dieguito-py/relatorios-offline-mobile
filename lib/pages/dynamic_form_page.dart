@@ -12,8 +12,17 @@ import '../widgets/app_form_widgets.dart';
 
 class DynamicFormPage extends StatefulWidget {
   final Map<String, dynamic> template;
+  final Map<String, dynamic>? initialData;
+  final int? localId;
+  final bool readOnly;
 
-  const DynamicFormPage({super.key, required this.template});
+  const DynamicFormPage({
+    super.key,
+    required this.template,
+    this.initialData,
+    this.localId,
+    this.readOnly = false,
+  });
 
   @override
   State<DynamicFormPage> createState() => _DynamicFormPageState();
@@ -33,18 +42,29 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
 
   void _inicializarCampos() {
     final campos = widget.template['campos'] as List<dynamic>;
+    final initialData = widget.initialData;
+
     for (var campo in campos) {
       final chave = campo['chave'];
       final tipo = campo['tipo'];
+      final initialValue = initialData?[chave];
 
       if (tipo == 'TEXTO' || tipo == 'NUMERO' || tipo == 'DATA' || tipo == 'LOCALIZACAO') {
-        _controllers[chave] = TextEditingController();
+        _controllers[chave] = TextEditingController(text: initialValue?.toString() ?? '');
       } else if (tipo == 'MULTIPLA_SELECAO') {
-        _values[chave] = <String>[];
+        if (initialValue is List) {
+          _values[chave] = List<String>.from(initialValue);
+        } else {
+          _values[chave] = <String>[];
+        }
       } else if (tipo == 'IMAGEM' || tipo == 'ASSINATURA') {
-        _values[chave] = <Uint8List>[];
+        if (initialValue is List) {
+          _values[chave] = initialValue.map((e) => base64Decode(e.toString())).toList();
+        } else {
+          _values[chave] = <Uint8List>[];
+        }
       } else if (tipo == 'BOOLEANO' || tipo == 'SELECAO') {
-        _values[chave] = null;
+        _values[chave] = initialValue;
       }
     }
   }
@@ -58,6 +78,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
   }
 
   Future<void> _capturarLocalizacao(String chave) async {
+    if (widget.readOnly) return;
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
@@ -123,6 +144,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
   }
 
   Future<void> _selecionarData(String chave) async {
+    if (widget.readOnly) return;
     final picked = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
@@ -138,6 +160,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
   }
 
   Future<void> _selecionarImagem(String chave, {required bool daCamera}) async {
+    if (widget.readOnly) return;
     if (daCamera) {
       final bytes = await ImageHelper.pickAndCompress(ImageSource.camera);
       if (bytes != null) {
@@ -156,6 +179,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
   }
 
   Future<void> _abrirSignaturePad(String chave) async {
+    if (widget.readOnly) return;
     await showDialog(
       context: context,
       builder: (context) => SignaturePad(
@@ -169,6 +193,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
   }
 
   void _abrirMultiplaSelecao(String chave, String label, List<String> opcoes) async {
+    if (widget.readOnly) return;
     List<String> selecionados = List<String>.from(_values[chave] ?? []);
     
     await showDialog(
@@ -238,11 +263,20 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
           dadosParaSalvar['municipalId'] = municipalIdFromAuth;
         }
 
-        final idLocal = await AppDatabase.instance.salvarFormulario(
-          tipo: widget.template['nome'],
-          templateId: widget.template['id'],
-          dadosJson: jsonEncode(dadosParaSalvar),
-        );
+        int idLocal;
+        if (widget.localId != null) {
+          idLocal = widget.localId!;
+          await AppDatabase.instance.atualizarFormulario(
+            id: idLocal,
+            dadosJson: jsonEncode(dadosParaSalvar),
+          );
+        } else {
+          idLocal = await AppDatabase.instance.salvarFormulario(
+            tipo: widget.template['nome'],
+            templateId: widget.template['id'],
+            dadosJson: jsonEncode(dadosParaSalvar),
+          );
+        }
 
         bool sincronizado = false;
         try {
@@ -300,28 +334,29 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
             children: [
               ...campos.map((campo) => _buildField(campo)),
               const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: _isSaving ? null : _salvar,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF3A3F7A),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: _isSaving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
+              if (!widget.readOnly)
+                ElevatedButton(
+                  onPressed: _isSaving ? null : _salvar,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF3A3F7A),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'SALVAR RELATÓRIO',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
-                      )
-                    : const Text(
-                        'SALVAR RELATÓRIO',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-              ),
+                ),
             ],
           ),
         ),
@@ -342,6 +377,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
           controller: _controllers[chave]!,
           label: label,
           obrigatorio: obrigatorio,
+          readOnly: widget.readOnly,
           keyboardType: tipo == 'NUMERO' ? TextInputType.number : TextInputType.text,
         );
 
@@ -378,7 +414,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
                   DropdownMenuItem(value: true, child: Text('Sim')),
                   DropdownMenuItem(value: false, child: Text('Não')),
                 ],
-                onChanged: (v) => setState(() => _values[chave] = v),
+                onChanged: widget.readOnly ? null : (v) => setState(() => _values[chave] = v),
                 validator: (v) => (obrigatorio && v == null) ? 'Obrigatório' : null,
               ),
             ],
@@ -409,7 +445,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
                 items: opcoes.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(),
-                onChanged: (v) => setState(() => _values[chave] = v),
+                onChanged: widget.readOnly ? null : (v) => setState(() => _values[chave] = v),
                 validator: (v) => (obrigatorio && v == null) ? 'Obrigatório' : null,
               ),
             ],
@@ -530,13 +566,15 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
                               Positioned(
                                 right: 0,
                                 top: 0,
-                                child: GestureDetector(
-                                  onTap: () => setState(() => fotos.removeAt(entry.key)),
-                                  child: Container(
-                                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                                    child: const Icon(Icons.close, color: Colors.white, size: 20),
-                                  ),
-                                ),
+                                child: widget.readOnly 
+                                    ? const SizedBox.shrink()
+                                    : GestureDetector(
+                                        onTap: () => setState(() => fotos.removeAt(entry.key)),
+                                        child: Container(
+                                          decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                          child: const Icon(Icons.close, color: Colors.white, size: 20),
+                                        ),
+                                      ),
                               ),
                             ],
                           ))
@@ -573,13 +611,15 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
                           Positioned(
                             right: 0,
                             top: 0,
-                            child: GestureDetector(
-                              onTap: () => setState(() => assinaturas.removeAt(entry.key)),
-                              child: Container(
-                                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                                child: const Icon(Icons.close, color: Colors.white, size: 20),
-                              ),
-                            ),
+                            child: widget.readOnly
+                                ? const SizedBox.shrink()
+                                : GestureDetector(
+                                    onTap: () => setState(() => assinaturas.removeAt(entry.key)),
+                                    child: Container(
+                                      decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                      child: const Icon(Icons.close, color: Colors.white, size: 20),
+                                    ),
+                                  ),
                           ),
                         ],
                       )),
